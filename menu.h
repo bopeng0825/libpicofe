@@ -125,10 +125,11 @@ extern int g_menubg_src_pp;
 
 extern int g_autostateld_opt;
 
-extern const int me_mfont_w, me_mfont_h;
-extern const int me_sfont_w, me_sfont_h;
+extern int me_mfont_w, me_mfont_h;
+extern int me_sfont_w, me_sfont_h;
 
 void menu_init_base(void);
+void menu_init_base_scale(unsigned int scale);
 void menu_update_msg(const char *msg);
 void text_out16(int x, int y, const char *texto, ...);
 void smalltext_out16(int x, int y, const char *texto, int color);

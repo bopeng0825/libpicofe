@@ -15,6 +15,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include <locale.h> // savestate date
+#include <assert.h>
 
 #include "menu.h"
 #include "fonts.h"
@@ -59,14 +60,8 @@ static unsigned char *menu_font_data = NULL;
 static int menu_text_color = 0xfffe; // default to white
 static int menu_sel_color = -1; // disabled
 
-/* note: these might become non-constant in future */
-#if MENU_X2
-const int me_mfont_w = 16, me_mfont_h = 20;
-const int me_sfont_w = 12, me_sfont_h = 20;
-#else
-const int me_mfont_w = 8, me_mfont_h = 10;
-const int me_sfont_w = 6, me_sfont_h = 10;
-#endif
+int me_mfont_w = 8, me_mfont_h = 10;
+int me_sfont_w = 6, me_sfont_h = 10;
 
 static int g_menu_filter_off;
 static int g_border_style;
@@ -258,19 +253,26 @@ static char tolower_simple(char c)
 	return c;
 }
 
-void menu_init_base(void)
+void menu_init_base_scale(unsigned int scale)
 {
 	int i, c, l, pos;
 	unsigned char *fd, *fds;
 	char buff[256];
 	FILE *f;
 
+	if (scale != 1 && scale != 2) {
+		assert(0); // not supported
+		return;
+	}
 	if (menu_font_data != NULL)
 		free(menu_font_data);
 
-	menu_font_data = calloc((MENU_X2 ? 256 * 320 : 128 * 160) / 2, 1);
+	menu_font_data = calloc(128 * scale * 160 * scale / 2, 1);
 	if (menu_font_data == NULL)
 		return;
+
+	me_mfont_w = 8 * scale; me_mfont_h = 10 * scale;
+	me_sfont_w = 6 * scale, me_sfont_h = 10 * scale;
 
 	// generate default 8x10 font from fontdata8x8
 	for (c = 0, fd = menu_font_data; c < 128; c++)
@@ -290,8 +292,8 @@ void menu_init_base(void)
 		fd += 8*2/2; // 2 empty lines
 	}
 
-	if (MENU_X2) {
-		// expand default font
+	if (scale > 1) {
+		// expand the default font
 		fds = menu_font_data + 128 * 160 / 2 - 4;
 		fd  = menu_font_data + 256 * 320 / 2 - 1;
 		for (c = 255; c >= 0; c--)
@@ -316,13 +318,18 @@ void menu_init_base(void)
 
 	// load custom font and selector (stored as 1st symbol in font table)
 	pos = plat_get_skin_dir(buff, sizeof(buff));
-	strcpy(buff + pos, "font.png");
-	readpng(menu_font_data, buff, READPNG_FONT,
-		MENU_X2 ? 256 : 128, MENU_X2 ? 320 : 160);
+	if (scale > 1)
+		snprintf(buff + pos, sizeof(buff) - pos, "fontx%d.png", scale);
+	else
+		snprintf(buff + pos, sizeof(buff) - pos, "font.png");
+	readpng(menu_font_data, buff, READPNG_FONT, 128 * scale, 160 * scale);
 	// default selector symbol is '>'
 	memcpy(menu_font_data, menu_font_data + ((int)'>') * me_mfont_w * me_mfont_h / 2,
 		me_mfont_w * me_mfont_h / 2);
-	strcpy(buff + pos, "selector.png");
+	if (scale > 1)
+		snprintf(buff + pos, sizeof(buff) - pos, "selectorx%d.png", scale);
+	else
+		snprintf(buff + pos, sizeof(buff) - pos, "selector.png");
 	readpng(menu_font_data, buff, READPNG_SELECTOR, me_mfont_w, me_mfont_h);
 
 	// load custom colors
@@ -357,6 +364,11 @@ void menu_init_base(void)
 
 	// use user's locale for savestate date display
 	setlocale(LC_TIME, "");
+}
+
+void menu_init_base(void)
+{
+	menu_init_base_scale(1);
 }
 
 static void menu_darken_bg(void *dst, void *src, int pixels, int darker)
