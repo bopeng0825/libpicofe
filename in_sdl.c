@@ -14,6 +14,96 @@
 #include "input.h"
 #include "in_sdl.h"
 
+#ifdef USE_SDL2
+#ifndef SDLK_LAST
+#define SDLK_LAST SDL_NUM_SCANCODES
+#endif
+#ifndef SDL_DEFAULT_REPEAT_DELAY
+#define SDL_DEFAULT_REPEAT_DELAY 500
+#endif
+#ifndef SDL_DEFAULT_REPEAT_INTERVAL
+#define SDL_DEFAULT_REPEAT_INTERVAL 30
+#endif
+#ifndef SDL_ENABLE
+#define SDL_ENABLE 1
+#endif
+#ifndef SDL_DISABLE
+#define SDL_DISABLE 0
+#endif
+#ifndef SDL_KEYDOWNMASK
+#define SDL_KEYDOWNMASK SDL_EVENTMASK(SDL_KEYDOWN)
+#endif
+#ifndef SDL_KEYUPMASK
+#define SDL_KEYUPMASK SDL_EVENTMASK(SDL_KEYUP)
+#endif
+#ifndef SDL_JOYAXISMOTIONMASK
+#define SDL_JOYAXISMOTIONMASK SDL_EVENTMASK(SDL_JOYAXISMOTION)
+#endif
+#ifndef SDL_JOYBALLMOTIONMASK
+#define SDL_JOYBALLMOTIONMASK SDL_EVENTMASK(SDL_JOYBALLMOTION)
+#endif
+#ifndef SDL_JOYHATMOTIONMASK
+#define SDL_JOYHATMOTIONMASK SDL_EVENTMASK(SDL_JOYHATMOTION)
+#endif
+#ifndef SDL_JOYBUTTONDOWNMASK
+#define SDL_JOYBUTTONDOWNMASK SDL_EVENTMASK(SDL_JOYBUTTONDOWN)
+#endif
+#ifndef SDL_JOYBUTTONUPMASK
+#define SDL_JOYBUTTONUPMASK SDL_EVENTMASK(SDL_JOYBUTTONUP)
+#endif
+#ifndef SDL_ALLEVENTS
+#define SDL_ALLEVENTS 0xffffffffu
+#endif
+
+#define SDLK_KP0 SDL_SCANCODE_KP_0
+#define SDLK_KP1 SDL_SCANCODE_KP_1
+#define SDLK_KP2 SDL_SCANCODE_KP_2
+#define SDLK_KP3 SDL_SCANCODE_KP_3
+#define SDLK_KP4 SDL_SCANCODE_KP_4
+#define SDLK_KP5 SDL_SCANCODE_KP_5
+#define SDLK_KP6 SDL_SCANCODE_KP_6
+#define SDLK_KP7 SDL_SCANCODE_KP_7
+#define SDLK_KP8 SDL_SCANCODE_KP_8
+#define SDLK_KP9 SDL_SCANCODE_KP_9
+#define SDLK_NUMLOCK SDL_SCANCODE_NUMLOCKCLEAR
+#define SDLK_SCROLLOCK SDL_SCANCODE_SCROLLLOCK
+#define SDLK_RMETA SDL_SCANCODE_RGUI
+#define SDLK_LMETA SDL_SCANCODE_LGUI
+#define SDLK_LSUPER SDL_SCANCODE_LGUI
+#define SDLK_RSUPER SDL_SCANCODE_RGUI
+#define SDLK_COMPOSE SDL_SCANCODE_APPLICATION
+#define SDLK_WORLD_0 (SDL_NUM_SCANCODES - 4)
+#define SDLK_WORLD_1 (SDL_NUM_SCANCODES - 3)
+#define SDLK_WORLD_2 (SDL_NUM_SCANCODES - 2)
+#define SDLK_WORLD_3 (SDL_NUM_SCANCODES - 1)
+
+static inline const char *sdl_joystick_name(int index)
+{
+	return SDL_JoystickNameForIndex(index);
+}
+
+static inline int sdl_peep_events_compat(SDL_Event *events, int numevents, SDL_eventaction action, Uint32 mask)
+{
+	Uint32 min_type = SDL_FIRSTEVENT;
+	Uint32 max_type = SDL_LASTEVENT;
+
+	(void)mask;
+	if (events == NULL && numevents == 0 && action == SDL_PEEKEVENT)
+		return SDL_PeepEvents(NULL, 0, SDL_PEEKEVENT, min_type, max_type);
+
+	if (events != NULL && action == SDL_GETEVENT)
+		return SDL_PeepEvents(events, numevents, action, min_type, max_type);
+
+	if (events != NULL && action == SDL_ADDEVENT)
+		return SDL_PeepEvents(events, numevents, action, min_type, max_type);
+
+	return SDL_PeepEvents(events, numevents, action, min_type, max_type);
+}
+#define SDL_JoystickName(i) sdl_joystick_name(i)
+#define SDL_PeepEvents(events, numevents, action, mask) \
+	sdl_peep_events_compat((events), (numevents), (action), (mask))
+#endif
+
 #define IN_SDL_PREFIX "sdl:"
 /* should be machine word for best performace */
 typedef unsigned long keybits_t;
