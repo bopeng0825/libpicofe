@@ -10,6 +10,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <SDL.h>
 #include "input.h"
 #include "in_sdl.h"
@@ -54,6 +55,10 @@
 #ifndef SDL_ALLEVENTS
 #define SDL_ALLEVENTS 0xffffffffu
 #endif
+#ifndef JOY_EVENTS
+#define JOY_EVENTS (SDL_JOYAXISMOTIONMASK | SDL_JOYBALLMOTIONMASK | SDL_JOYHATMOTIONMASK \
+		    | SDL_JOYBUTTONDOWNMASK | SDL_JOYBUTTONUPMASK)
+#endif
 
 #define SDLK_KP0 SDL_SCANCODE_KP_0
 #define SDLK_KP1 SDL_SCANCODE_KP_1
@@ -65,6 +70,13 @@
 #define SDLK_KP7 SDL_SCANCODE_KP_7
 #define SDLK_KP8 SDL_SCANCODE_KP_8
 #define SDLK_KP9 SDL_SCANCODE_KP_9
+#define SDLK_KP_PERIOD SDL_SCANCODE_KP_PERIOD
+#define SDLK_KP_DIVIDE SDL_SCANCODE_KP_DIVIDE
+#define SDLK_KP_MULTIPLY SDL_SCANCODE_KP_MULTIPLY
+#define SDLK_KP_MINUS SDL_SCANCODE_KP_MINUS
+#define SDLK_KP_PLUS SDL_SCANCODE_KP_PLUS
+#define SDLK_KP_ENTER SDL_SCANCODE_KP_ENTER
+#define SDLK_KP_EQUALS SDL_SCANCODE_KP_EQUALS
 #define SDLK_NUMLOCK SDL_SCANCODE_NUMLOCKCLEAR
 #define SDLK_SCROLLOCK SDL_SCANCODE_SCROLLLOCK
 #define SDLK_RMETA SDL_SCANCODE_RGUI
@@ -77,27 +89,266 @@
 #define SDLK_WORLD_2 (SDL_NUM_SCANCODES - 2)
 #define SDLK_WORLD_3 (SDL_NUM_SCANCODES - 1)
 
+/* SDL2 keycodes are not compact array indexes; keep this driver on scancodes. */
+#undef SDLK_BACKSPACE
+#undef SDLK_TAB
+#undef SDLK_CLEAR
+#undef SDLK_RETURN
+#undef SDLK_PAUSE
+#undef SDLK_ESCAPE
+#undef SDLK_SPACE
+#undef SDLK_EXCLAIM
+#undef SDLK_QUOTEDBL
+#undef SDLK_HASH
+#undef SDLK_DOLLAR
+#undef SDLK_AMPERSAND
+#undef SDLK_QUOTE
+#undef SDLK_LEFTPAREN
+#undef SDLK_RIGHTPAREN
+#undef SDLK_ASTERISK
+#undef SDLK_PLUS
+#undef SDLK_COMMA
+#undef SDLK_MINUS
+#undef SDLK_PERIOD
+#undef SDLK_SLASH
+#undef SDLK_0
+#undef SDLK_1
+#undef SDLK_2
+#undef SDLK_3
+#undef SDLK_4
+#undef SDLK_5
+#undef SDLK_6
+#undef SDLK_7
+#undef SDLK_8
+#undef SDLK_9
+#undef SDLK_COLON
+#undef SDLK_SEMICOLON
+#undef SDLK_LESS
+#undef SDLK_EQUALS
+#undef SDLK_GREATER
+#undef SDLK_QUESTION
+#undef SDLK_AT
+#undef SDLK_LEFTBRACKET
+#undef SDLK_BACKSLASH
+#undef SDLK_RIGHTBRACKET
+#undef SDLK_CARET
+#undef SDLK_UNDERSCORE
+#undef SDLK_BACKQUOTE
+#undef SDLK_a
+#undef SDLK_b
+#undef SDLK_c
+#undef SDLK_d
+#undef SDLK_e
+#undef SDLK_f
+#undef SDLK_g
+#undef SDLK_h
+#undef SDLK_i
+#undef SDLK_j
+#undef SDLK_k
+#undef SDLK_l
+#undef SDLK_m
+#undef SDLK_n
+#undef SDLK_o
+#undef SDLK_p
+#undef SDLK_q
+#undef SDLK_r
+#undef SDLK_s
+#undef SDLK_t
+#undef SDLK_u
+#undef SDLK_v
+#undef SDLK_w
+#undef SDLK_x
+#undef SDLK_y
+#undef SDLK_z
+#undef SDLK_DELETE
+#undef SDLK_UP
+#undef SDLK_DOWN
+#undef SDLK_RIGHT
+#undef SDLK_LEFT
+#undef SDLK_INSERT
+#undef SDLK_HOME
+#undef SDLK_END
+#undef SDLK_PAGEUP
+#undef SDLK_PAGEDOWN
+#undef SDLK_F1
+#undef SDLK_F2
+#undef SDLK_F3
+#undef SDLK_F4
+#undef SDLK_F5
+#undef SDLK_F6
+#undef SDLK_F7
+#undef SDLK_F8
+#undef SDLK_F9
+#undef SDLK_F10
+#undef SDLK_F11
+#undef SDLK_F12
+#undef SDLK_F13
+#undef SDLK_F14
+#undef SDLK_F15
+#undef SDLK_CAPSLOCK
+#undef SDLK_RSHIFT
+#undef SDLK_LSHIFT
+#undef SDLK_RCTRL
+#undef SDLK_LCTRL
+#undef SDLK_RALT
+#undef SDLK_LALT
+#undef SDLK_MODE
+
+#define SDLK_BACKSPACE SDL_SCANCODE_BACKSPACE
+#define SDLK_TAB SDL_SCANCODE_TAB
+#define SDLK_CLEAR SDL_SCANCODE_DELETE
+#define SDLK_RETURN SDL_SCANCODE_RETURN
+#define SDLK_PAUSE SDL_SCANCODE_PAUSE
+#define SDLK_ESCAPE SDL_SCANCODE_ESCAPE
+#define SDLK_SPACE SDL_SCANCODE_SPACE
+#define SDLK_EXCLAIM SDL_SCANCODE_1
+#define SDLK_QUOTEDBL SDL_SCANCODE_APOSTROPHE
+#define SDLK_HASH SDL_SCANCODE_3
+#define SDLK_DOLLAR SDL_SCANCODE_4
+#define SDLK_AMPERSAND SDL_SCANCODE_7
+#define SDLK_QUOTE SDL_SCANCODE_APOSTROPHE
+#define SDLK_LEFTPAREN SDL_SCANCODE_9
+#define SDLK_RIGHTPAREN SDL_SCANCODE_0
+#define SDLK_ASTERISK SDL_SCANCODE_8
+#define SDLK_PLUS SDL_SCANCODE_EQUALS
+#define SDLK_COMMA SDL_SCANCODE_COMMA
+#define SDLK_MINUS SDL_SCANCODE_MINUS
+#define SDLK_PERIOD SDL_SCANCODE_PERIOD
+#define SDLK_SLASH SDL_SCANCODE_SLASH
+#define SDLK_0 SDL_SCANCODE_0
+#define SDLK_1 SDL_SCANCODE_1
+#define SDLK_2 SDL_SCANCODE_2
+#define SDLK_3 SDL_SCANCODE_3
+#define SDLK_4 SDL_SCANCODE_4
+#define SDLK_5 SDL_SCANCODE_5
+#define SDLK_6 SDL_SCANCODE_6
+#define SDLK_7 SDL_SCANCODE_7
+#define SDLK_8 SDL_SCANCODE_8
+#define SDLK_9 SDL_SCANCODE_9
+#define SDLK_COLON SDL_SCANCODE_SEMICOLON
+#define SDLK_SEMICOLON SDL_SCANCODE_SEMICOLON
+#define SDLK_LESS SDL_SCANCODE_COMMA
+#define SDLK_EQUALS SDL_SCANCODE_EQUALS
+#define SDLK_GREATER SDL_SCANCODE_PERIOD
+#define SDLK_QUESTION SDL_SCANCODE_SLASH
+#define SDLK_AT SDL_SCANCODE_2
+#define SDLK_LEFTBRACKET SDL_SCANCODE_LEFTBRACKET
+#define SDLK_BACKSLASH SDL_SCANCODE_BACKSLASH
+#define SDLK_RIGHTBRACKET SDL_SCANCODE_RIGHTBRACKET
+#define SDLK_CARET SDL_SCANCODE_6
+#define SDLK_UNDERSCORE SDL_SCANCODE_MINUS
+#define SDLK_BACKQUOTE SDL_SCANCODE_GRAVE
+#define SDLK_a SDL_SCANCODE_A
+#define SDLK_b SDL_SCANCODE_B
+#define SDLK_c SDL_SCANCODE_C
+#define SDLK_d SDL_SCANCODE_D
+#define SDLK_e SDL_SCANCODE_E
+#define SDLK_f SDL_SCANCODE_F
+#define SDLK_g SDL_SCANCODE_G
+#define SDLK_h SDL_SCANCODE_H
+#define SDLK_i SDL_SCANCODE_I
+#define SDLK_j SDL_SCANCODE_J
+#define SDLK_k SDL_SCANCODE_K
+#define SDLK_l SDL_SCANCODE_L
+#define SDLK_m SDL_SCANCODE_M
+#define SDLK_n SDL_SCANCODE_N
+#define SDLK_o SDL_SCANCODE_O
+#define SDLK_p SDL_SCANCODE_P
+#define SDLK_q SDL_SCANCODE_Q
+#define SDLK_r SDL_SCANCODE_R
+#define SDLK_s SDL_SCANCODE_S
+#define SDLK_t SDL_SCANCODE_T
+#define SDLK_u SDL_SCANCODE_U
+#define SDLK_v SDL_SCANCODE_V
+#define SDLK_w SDL_SCANCODE_W
+#define SDLK_x SDL_SCANCODE_X
+#define SDLK_y SDL_SCANCODE_Y
+#define SDLK_z SDL_SCANCODE_Z
+#define SDLK_DELETE SDL_SCANCODE_DELETE
+#define SDLK_UP SDL_SCANCODE_UP
+#define SDLK_DOWN SDL_SCANCODE_DOWN
+#define SDLK_RIGHT SDL_SCANCODE_RIGHT
+#define SDLK_LEFT SDL_SCANCODE_LEFT
+#define SDLK_INSERT SDL_SCANCODE_INSERT
+#define SDLK_HOME SDL_SCANCODE_HOME
+#define SDLK_END SDL_SCANCODE_END
+#define SDLK_PAGEUP SDL_SCANCODE_PAGEUP
+#define SDLK_PAGEDOWN SDL_SCANCODE_PAGEDOWN
+#define SDLK_F1 SDL_SCANCODE_F1
+#define SDLK_F2 SDL_SCANCODE_F2
+#define SDLK_F3 SDL_SCANCODE_F3
+#define SDLK_F4 SDL_SCANCODE_F4
+#define SDLK_F5 SDL_SCANCODE_F5
+#define SDLK_F6 SDL_SCANCODE_F6
+#define SDLK_F7 SDL_SCANCODE_F7
+#define SDLK_F8 SDL_SCANCODE_F8
+#define SDLK_F9 SDL_SCANCODE_F9
+#define SDLK_F10 SDL_SCANCODE_F10
+#define SDLK_F11 SDL_SCANCODE_F11
+#define SDLK_F12 SDL_SCANCODE_F12
+#define SDLK_F13 SDL_SCANCODE_F13
+#define SDLK_F14 SDL_SCANCODE_F14
+#define SDLK_F15 SDL_SCANCODE_F15
+#define SDLK_CAPSLOCK SDL_SCANCODE_CAPSLOCK
+#define SDLK_RSHIFT SDL_SCANCODE_RSHIFT
+#define SDLK_LSHIFT SDL_SCANCODE_LSHIFT
+#define SDLK_RCTRL SDL_SCANCODE_RCTRL
+#define SDLK_LCTRL SDL_SCANCODE_LCTRL
+#define SDLK_RALT SDL_SCANCODE_RALT
+#define SDLK_LALT SDL_SCANCODE_LALT
+#define SDLK_MODE SDL_SCANCODE_MODE
+
 static inline const char *sdl_joystick_name(int index)
 {
 	return SDL_JoystickNameForIndex(index);
+}
+
+static inline void sdl_fix_event_key(SDL_Event *event)
+{
+	if (event->type == SDL_KEYDOWN || event->type == SDL_KEYUP)
+		event->key.keysym.sym = event->key.keysym.scancode;
+}
+
+static inline void sdl_event_range_from_mask(Uint32 mask, Uint32 *min_type, Uint32 *max_type)
+{
+	if ((mask & (SDL_KEYDOWNMASK | SDL_KEYUPMASK)) == mask) {
+		*min_type = SDL_KEYDOWN;
+		*max_type = SDL_KEYUP;
+	} else if ((mask & JOY_EVENTS) == mask) {
+		*min_type = SDL_JOYAXISMOTION;
+		*max_type = SDL_JOYBUTTONUP;
+	} else {
+		*min_type = SDL_FIRSTEVENT;
+		*max_type = SDL_LASTEVENT;
+	}
 }
 
 static inline int sdl_peep_events_compat(SDL_Event *events, int numevents, SDL_eventaction action, Uint32 mask)
 {
 	Uint32 min_type = SDL_FIRSTEVENT;
 	Uint32 max_type = SDL_LASTEVENT;
+	int count, i;
 
-	(void)mask;
-	if (events == NULL && numevents == 0 && action == SDL_PEEKEVENT)
-		return SDL_PeepEvents(NULL, 0, SDL_PEEKEVENT, min_type, max_type);
+	sdl_event_range_from_mask(mask, &min_type, &max_type);
+	count = SDL_PeepEvents(events, numevents, action, min_type, max_type);
 
-	if (events != NULL && action == SDL_GETEVENT)
-		return SDL_PeepEvents(events, numevents, action, min_type, max_type);
+	if (events != NULL && count > 0) {
+		for (i = 0; i < count; i++) {
+			if (action == SDL_GETEVENT &&
+			    !(mask & SDL_EVENTMASK(events[i].type))) {
+				SDL_PushEvent(&events[i]);
+				if (i + 1 < count)
+					memmove(&events[i], &events[i + 1],
+						(count - i - 1) * sizeof(events[0]));
+				count--;
+				i--;
+				continue;
+			}
+			sdl_fix_event_key(&events[i]);
+		}
+	}
 
-	if (events != NULL && action == SDL_ADDEVENT)
-		return SDL_PeepEvents(events, numevents, action, min_type, max_type);
-
-	return SDL_PeepEvents(events, numevents, action, min_type, max_type);
+	return count;
 }
 #define SDL_JoystickName(i) sdl_joystick_name(i)
 #define SDL_PeepEvents(events, numevents, action, mask) \
@@ -124,21 +375,27 @@ static void (*ext_event_handler)(void *event);
 static const char * const in_sdl_keys[SDLK_LAST] = {
 	[SDLK_BACKSPACE] = "backspace",
 	[SDLK_TAB] = "tab",
+#ifndef USE_SDL2
 	[SDLK_CLEAR] = "clear",
+#endif
 	[SDLK_RETURN] = "return",
 	[SDLK_PAUSE] = "pause",
 	[SDLK_ESCAPE] = "escape",
 	[SDLK_SPACE] = "space",
+#ifndef USE_SDL2
 	[SDLK_EXCLAIM]  = "!",
 	[SDLK_QUOTEDBL]  = "\"",
 	[SDLK_HASH]  = "#",
 	[SDLK_DOLLAR]  = "$",
 	[SDLK_AMPERSAND]  = "&",
+#endif
 	[SDLK_QUOTE] = "'",
+#ifndef USE_SDL2
 	[SDLK_LEFTPAREN] = "(",
 	[SDLK_RIGHTPAREN] = ")",
 	[SDLK_ASTERISK] = "*",
 	[SDLK_PLUS] = "+",
+#endif
 	[SDLK_COMMA] = ",",
 	[SDLK_MINUS] = "-",
 	[SDLK_PERIOD] = ".",
@@ -153,18 +410,26 @@ static const char * const in_sdl_keys[SDLK_LAST] = {
 	[SDLK_7] = "7",
 	[SDLK_8] = "8",
 	[SDLK_9] = "9",
+#ifndef USE_SDL2
 	[SDLK_COLON] = ":",
+#endif
 	[SDLK_SEMICOLON] = ";",
+#ifndef USE_SDL2
 	[SDLK_LESS] = "<",
+#endif
 	[SDLK_EQUALS] = "=",
+#ifndef USE_SDL2
 	[SDLK_GREATER] = ">",
 	[SDLK_QUESTION] = "?",
 	[SDLK_AT] = "@",
+#endif
 	[SDLK_LEFTBRACKET] = "[",
 	[SDLK_BACKSLASH] = "\\",
 	[SDLK_RIGHTBRACKET] = "]",
+#ifndef USE_SDL2
 	[SDLK_CARET] = "^",
 	[SDLK_UNDERSCORE] = "_",
+#endif
 	[SDLK_BACKQUOTE] = "`",
 	[SDLK_a] = "a",
 	[SDLK_b] = "b",
@@ -292,7 +557,11 @@ static void in_sdl_probe(const in_drv_t *drv)
 			break;
 		}
 		state->joy = joy;
+#ifdef USE_SDL2
+		state->joy_id = SDL_JoystickInstanceID(joy);
+#else
 		state->joy_id = i;
+#endif
 		state->drv = drv;
 
 		snprintf(name, sizeof(name), IN_SDL_PREFIX "%s", SDL_JoystickName(i));
@@ -437,8 +706,10 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 	return ret;
 }
 
+#ifndef JOY_EVENTS
 #define JOY_EVENTS (SDL_JOYAXISMOTIONMASK | SDL_JOYBALLMOTIONMASK | SDL_JOYHATMOTIONMASK \
 		    | SDL_JOYBUTTONDOWNMASK | SDL_JOYBUTTONUPMASK)
+#endif
 
 static int collect_events(struct in_sdl_state *state, int *one_kc, int *one_down)
 {
@@ -446,16 +717,13 @@ static int collect_events(struct in_sdl_state *state, int *one_kc, int *one_down
 	Uint32 mask = state->joy ? JOY_EVENTS : (SDL_ALLEVENTS & ~JOY_EVENTS);
 	int count, maxcount, is_emukey;
 	int i, ret, retval = 0;
-	int num_events, num_peeped_events;
 	SDL_Event *event;
 
 	maxcount = (one_kc != NULL) ? 1 : sizeof(events) / sizeof(events[0]);
 
 	SDL_PumpEvents();
 
-	num_events = SDL_PeepEvents(NULL, 0, SDL_PEEKEVENT, mask);
-
-	for (num_peeped_events = 0; num_peeped_events < num_events; num_peeped_events += count) {
+	for (;;) {
 		count = SDL_PeepEvents(events, maxcount, SDL_GETEVENT, mask);
 		if (count <= 0)
 			break;
