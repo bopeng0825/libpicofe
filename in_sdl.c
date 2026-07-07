@@ -31,29 +31,26 @@
 #ifndef SDL_DISABLE
 #define SDL_DISABLE 0
 #endif
-#ifndef SDL_EVENTMASK
-#define SDL_EVENTMASK(event) (1u << (event))
-#endif
 #ifndef SDL_KEYDOWNMASK
-#define SDL_KEYDOWNMASK SDL_EVENTMASK(SDL_KEYDOWN)
+#define SDL_KEYDOWNMASK (1u << 0)
 #endif
 #ifndef SDL_KEYUPMASK
-#define SDL_KEYUPMASK SDL_EVENTMASK(SDL_KEYUP)
+#define SDL_KEYUPMASK (1u << 1)
 #endif
 #ifndef SDL_JOYAXISMOTIONMASK
-#define SDL_JOYAXISMOTIONMASK SDL_EVENTMASK(SDL_JOYAXISMOTION)
+#define SDL_JOYAXISMOTIONMASK (1u << 2)
 #endif
 #ifndef SDL_JOYBALLMOTIONMASK
-#define SDL_JOYBALLMOTIONMASK SDL_EVENTMASK(SDL_JOYBALLMOTION)
+#define SDL_JOYBALLMOTIONMASK (1u << 3)
 #endif
 #ifndef SDL_JOYHATMOTIONMASK
-#define SDL_JOYHATMOTIONMASK SDL_EVENTMASK(SDL_JOYHATMOTION)
+#define SDL_JOYHATMOTIONMASK (1u << 4)
 #endif
 #ifndef SDL_JOYBUTTONDOWNMASK
-#define SDL_JOYBUTTONDOWNMASK SDL_EVENTMASK(SDL_JOYBUTTONDOWN)
+#define SDL_JOYBUTTONDOWNMASK (1u << 5)
 #endif
 #ifndef SDL_JOYBUTTONUPMASK
-#define SDL_JOYBUTTONUPMASK SDL_EVENTMASK(SDL_JOYBUTTONUP)
+#define SDL_JOYBUTTONUPMASK (1u << 6)
 #endif
 #ifndef SDL_ALLEVENTS
 #define SDL_ALLEVENTS 0xffffffffu
@@ -326,6 +323,28 @@ static inline void sdl_event_range_from_mask(Uint32 mask, Uint32 *min_type, Uint
 	}
 }
 
+static inline int sdl_event_matches_mask(Uint32 mask, Uint32 type)
+{
+	switch (type) {
+	case SDL_KEYDOWN:
+		return !!(mask & SDL_KEYDOWNMASK);
+	case SDL_KEYUP:
+		return !!(mask & SDL_KEYUPMASK);
+	case SDL_JOYAXISMOTION:
+		return !!(mask & SDL_JOYAXISMOTIONMASK);
+	case SDL_JOYBALLMOTION:
+		return !!(mask & SDL_JOYBALLMOTIONMASK);
+	case SDL_JOYHATMOTION:
+		return !!(mask & SDL_JOYHATMOTIONMASK);
+	case SDL_JOYBUTTONDOWN:
+		return !!(mask & SDL_JOYBUTTONDOWNMASK);
+	case SDL_JOYBUTTONUP:
+		return !!(mask & SDL_JOYBUTTONUPMASK);
+	default:
+		return !!(mask & ~(SDL_KEYDOWNMASK | SDL_KEYUPMASK | JOY_EVENTS));
+	}
+}
+
 static inline int sdl_peep_events_compat(SDL_Event *events, int numevents, SDL_eventaction action, Uint32 mask)
 {
 	Uint32 min_type = SDL_FIRSTEVENT;
@@ -338,7 +357,7 @@ static inline int sdl_peep_events_compat(SDL_Event *events, int numevents, SDL_e
 	if (events != NULL && count > 0) {
 		for (i = 0; i < count; i++) {
 			if (action == SDL_GETEVENT &&
-			    !(mask & SDL_EVENTMASK(events[i].type))) {
+			    !sdl_event_matches_mask(mask, events[i].type)) {
 				SDL_PushEvent(&events[i]);
 				if (i + 1 < count)
 					memmove(&events[i], &events[i + 1],
