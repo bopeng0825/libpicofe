@@ -31,6 +31,9 @@
 #ifndef SDL_DISABLE
 #define SDL_DISABLE 0
 #endif
+#ifndef SDL_EVENTMASK
+#define SDL_EVENTMASK(event) (1u << (event))
+#endif
 #ifndef SDL_KEYDOWNMASK
 #define SDL_KEYDOWNMASK SDL_EVENTMASK(SDL_KEYDOWN)
 #endif
