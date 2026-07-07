@@ -59,6 +59,7 @@
 enum {
 	IN_CFG_BIND_COUNT = 0,
 	IN_CFG_DOES_COMBOS,
+	IN_CFG_ALLOW_UNBOUND_MOD_KEYS,
 	IN_CFG_BLOCKING,
 	IN_CFG_KEY_NAMES,
 	IN_CFG_ABS_DEAD_ZONE,	/* dead zone for analog-digital mapping */
@@ -110,6 +111,11 @@ struct menu_keymap {
 	short pbtn;
 };
 
+struct mod_keymap {
+	short inkey;
+	short outkey;
+};
+
 struct in_pdata {
 	const struct in_default_bind *defbinds;
 	const struct menu_keymap *key_map;
@@ -117,6 +123,9 @@ struct in_pdata {
 	const struct menu_keymap *joy_map;
 	size_t jmap_size;
 	const char * const *key_names;
+	short mod_key;
+	const struct mod_keymap *mod_keymap;
+	size_t modmap_size;
 };
 
 /* to be called by drivers */
