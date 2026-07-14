@@ -387,14 +387,14 @@ struct in_sdl_state {
 	SDL_Joystick *joy;
 	int joy_id;
 	int axis_keydown[2];
-	keybits_t keystate[SDLK_LAST / KEYBITS_WORD_BITS + 1];
+	keybits_t keystate[IN_SDL_KEY_COUNT / KEYBITS_WORD_BITS + 1];
 	// emulator keys should always be processed immediately lest one is lost
-	keybits_t emu_keys[SDLK_LAST / KEYBITS_WORD_BITS + 1];
+	keybits_t emu_keys[IN_SDL_KEY_COUNT / KEYBITS_WORD_BITS + 1];
 };
 
 static void (*ext_event_handler)(void *event);
 
-static const char * const in_sdl_keys[SDLK_LAST] = {
+static const char * const in_sdl_keys[IN_SDL_KEY_COUNT] = {
 	[SDLK_BACKSPACE] = "backspace",
 	[SDLK_TAB] = "tab",
 #ifndef USE_SDL2
@@ -540,6 +540,23 @@ static const char * const in_sdl_keys[SDLK_LAST] = {
 	[SDLK_RSUPER] = "right super",	
 	[SDLK_MODE] = "alt gr",
 	[SDLK_COMPOSE] = "compose",
+
+	[SDL_JOY_BUTTON(0)] = "joy 0",
+	[SDL_JOY_BUTTON(1)] = "joy 1",
+	[SDL_JOY_BUTTON(2)] = "joy 2",
+	[SDL_JOY_BUTTON(3)] = "joy 3",
+	[SDL_JOY_BUTTON(4)] = "joy 4",
+	[SDL_JOY_BUTTON(5)] = "joy 5",
+	[SDL_JOY_BUTTON(6)] = "joy 6",
+	[SDL_JOY_BUTTON(7)] = "joy 7",
+	[SDL_JOY_BUTTON(8)] = "joy 8",
+	[SDL_JOY_BUTTON(9)] = "joy 9",
+	[SDL_JOY_BUTTON(10)] = "joy 10",
+	[SDL_JOY_BUTTON(11)] = "joy 11",
+	[SDL_JOY_BUTTON(12)] = "joy 12",
+	[SDL_JOY_BUTTON(13)] = "joy 13",
+	[SDL_JOY_BUTTON(14)] = "joy 14",
+	[SDL_JOY_BUTTON(15)] = "joy 15",
 };
 
 static void in_sdl_probe(const in_drv_t *drv)
@@ -561,7 +578,7 @@ static void in_sdl_probe(const in_drv_t *drv)
 	}
 
 	state->drv = drv;
-	in_register(IN_SDL_PREFIX "keys", -1, state, SDLK_LAST,
+	in_register(IN_SDL_PREFIX "keys", -1, state, IN_SDL_KEY_COUNT,
 		key_names, 0);
 
 	/* joysticks go here too */
@@ -587,7 +604,7 @@ static void in_sdl_probe(const in_drv_t *drv)
 		state->drv = drv;
 
 		snprintf(name, sizeof(name), IN_SDL_PREFIX "%s", SDL_JoystickName(i));
-		in_register(name, -1, state, SDLK_LAST, key_names, 0);
+		in_register(name, -1, state, IN_SDL_KEY_COUNT, key_names, 0);
 	}
 
 	if (joycount > 0)
@@ -609,7 +626,7 @@ static const char * const *
 in_sdl_get_key_names(const in_drv_t *drv, int *count)
 {
 	const struct in_pdata *pdata = drv->pdata;
-	*count = SDLK_LAST;
+	*count = IN_SDL_KEY_COUNT;
 
 	if (pdata->key_names)
 		return pdata->key_names;
@@ -706,7 +723,10 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 	case SDL_JOYBUTTONUP:
 		if (event->jbutton.which != state->joy_id)
 			return -2;
-		kc = (int)event->jbutton.button + SDLK_WORLD_0;
+		if (event->jbutton.button >= IN_SDL_JOY_BUTTON_COUNT) {
+			break;
+		}
+		kc = SDL_JOY_BUTTON(event->jbutton.button);
 		down = event->jbutton.state == SDL_PRESSED;
 		ret = 1;
 		break;
@@ -794,7 +814,7 @@ static int in_sdl_update(void *drv_data, const int *binds, int *result)
 
 	collect_events(state, NULL, NULL);
 
-	for (i = 0; i < SDLK_LAST / KEYBITS_WORD_BITS + 1; i++) {
+	for (i = 0; i < IN_SDL_KEY_COUNT / KEYBITS_WORD_BITS + 1; i++) {
 		mask = state->keystate[i];
 		if (mask == 0)
 			continue;
@@ -862,7 +882,7 @@ static int in_sdl_menu_translate(void *drv_data, int keycode, char *charcode)
 			}
 		}
 
-		if (charcode != NULL && (unsigned int)keycode < SDLK_LAST &&
+		if (charcode != NULL && (unsigned int)keycode < IN_SDL_KEY_COUNT &&
 		    key_names[keycode] != NULL && key_names[keycode][1] == 0)
 		{
 			ret |= PBTN_CHAR;
@@ -880,7 +900,7 @@ static int in_sdl_clean_binds(void *drv_data, int *binds, int *def_finds)
 
 	memset(state->emu_keys, 0, sizeof(state->emu_keys));
 	for (t = 0; t < IN_BINDTYPE_COUNT; t++)
-		for (i = 0; i < SDLK_LAST; i++)
+		for (i = 0; i < IN_SDL_KEY_COUNT; i++)
 			if (binds[IN_BIND_OFFS(i, t)]) {
 				if (t == IN_BINDTYPE_EMU)
 					update_keystate(state->emu_keys, i, 1);
