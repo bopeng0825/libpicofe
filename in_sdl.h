@@ -2,7 +2,7 @@
 #define LIBPICOFE_IN_SDL_H
 
 #ifndef IN_SDL_JOY_BUTTON_COUNT
-#define IN_SDL_JOY_BUTTON_COUNT 16
+#define IN_SDL_JOY_BUTTON_COUNT 32
 #endif
 
 #define SDL_JOY_BUTTON(button) (SDLK_LAST + (button))

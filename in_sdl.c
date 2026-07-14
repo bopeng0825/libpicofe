@@ -10,6 +10,7 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <SDL.h>
 #include "input.h"
@@ -388,6 +389,8 @@ struct in_sdl_state {
 	int joy_id;
 #ifdef USE_SDL2
 	int joy_index;
+	uint8_t joy_buttons[IN_SDL_JOY_BUTTON_COUNT];
+	int joy_axes[2];
 #endif
 	int axis_keydown[2];
 	keybits_t keystate[IN_SDL_KEY_COUNT / KEYBITS_WORD_BITS + 1];
@@ -811,6 +814,90 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 		    | SDL_JOYBUTTONDOWNMASK | SDL_JOYBUTTONUPMASK)
 #endif
 
+#ifdef USE_SDL2
+static int update_joy_key(struct in_sdl_state *state, int kc, int down,
+	int *one_kc, int *one_down)
+{
+	update_keystate(state->keystate, kc, down);
+	if (one_kc != NULL) {
+		*one_kc = kc;
+		if (one_down != NULL)
+			*one_down = down;
+		return 1;
+	}
+
+	return 0;
+}
+
+static int poll_joy_state(struct in_sdl_state *state, int *one_kc, int *one_down)
+{
+	int i, axes, buttons, ret = 0;
+
+	if (!state->joy)
+		return 0;
+
+	SDL_JoystickUpdate();
+
+	axes = SDL_JoystickNumAxes(state->joy);
+	if (axes > 2)
+		axes = 2;
+
+	for (i = 0; i < axes; i++) {
+		int value = SDL_JoystickGetAxis(state->joy, i);
+		int dir = 0;
+		int kc;
+
+		if (value < -16384)
+			dir = -1;
+		else if (value > 16384)
+			dir = 1;
+
+		if (dir == state->joy_axes[i])
+			continue;
+
+		if (state->joy_axes[i] != 0) {
+			kc = i ? (state->joy_axes[i] < 0 ? SDLK_UP : SDLK_DOWN)
+			       : (state->joy_axes[i] < 0 ? SDLK_LEFT : SDLK_RIGHT);
+			if (update_joy_key(state, kc, 0, one_kc, one_down))
+				return 1;
+			ret = 1;
+		}
+
+		state->joy_axes[i] = dir;
+		if (dir != 0) {
+			kc = i ? (dir < 0 ? SDLK_UP : SDLK_DOWN)
+			       : (dir < 0 ? SDLK_LEFT : SDLK_RIGHT);
+			if (update_joy_key(state, kc, 1, one_kc, one_down))
+				return 1;
+			ret = 1;
+		}
+	}
+
+	buttons = SDL_JoystickNumButtons(state->joy);
+	if (buttons > IN_SDL_JOY_BUTTON_COUNT)
+		buttons = IN_SDL_JOY_BUTTON_COUNT;
+
+	for (i = 0; i < buttons; i++) {
+		uint8_t down = SDL_JoystickGetButton(state->joy, i) ? 1 : 0;
+		int kc;
+
+		if (down == state->joy_buttons[i])
+			continue;
+
+		state->joy_buttons[i] = down;
+		kc = SDL_JOY_BUTTON(i);
+		if (in_sdl_debug_input())
+			fprintf(stderr, "in_sdl: polled joy button button=%d state=%d\n",
+				i, down);
+		if (update_joy_key(state, kc, down, one_kc, one_down))
+			return 1;
+		ret = 1;
+	}
+
+	return ret;
+}
+#endif
+
 static int collect_events(struct in_sdl_state *state, int *one_kc, int *one_down)
 {
 	SDL_Event events[4];
@@ -861,6 +948,10 @@ static int collect_events(struct in_sdl_state *state, int *one_kc, int *one_down
 	}
 
 out:
+#ifdef USE_SDL2
+	if (state->joy && (retval == 0 || one_kc == NULL))
+		retval |= poll_joy_state(state, one_kc, one_down);
+#endif
 	return retval;
 }
 
