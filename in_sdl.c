@@ -392,6 +392,7 @@ struct in_sdl_state {
 	int joy_index;
 	uint8_t joy_buttons[IN_SDL_JOY_BUTTON_COUNT];
 	int joy_axes[IN_SDL_JOY_AXIS_COUNT];
+	unsigned debug_poll_count;
 #endif
 	int axis_keydown[IN_SDL_JOY_AXIS_COUNT];
 	keybits_t keystate[IN_SDL_KEY_COUNT / KEYBITS_WORD_BITS + 1];
@@ -885,6 +886,16 @@ static int poll_joy_state(struct in_sdl_state *state, int *one_kc, int *one_down
 	if (buttons > IN_SDL_JOY_BUTTON_COUNT)
 		buttons = IN_SDL_JOY_BUTTON_COUNT;
 
+	if (in_sdl_debug_input() && (++state->debug_poll_count % 60) == 0) {
+		fprintf(stderr, "in_sdl: poll snapshot axes=");
+		for (i = 0; i < axes; i++)
+			fprintf(stderr, "%s%d", i ? "," : "", SDL_JoystickGetAxis(state->joy, i));
+		fprintf(stderr, " buttons=");
+		for (i = 0; i < buttons; i++)
+			fprintf(stderr, "%s%d", i ? "," : "", SDL_JoystickGetButton(state->joy, i));
+		fprintf(stderr, "\n");
+	}
+
 	for (i = 0; i < buttons; i++) {
 		uint8_t down = SDL_JoystickGetButton(state->joy, i) ? 1 : 0;
 		int kc;
@@ -968,6 +979,8 @@ static int in_sdl_update(void *drv_data, const int *binds, int *result)
 	struct in_sdl_state *state = drv_data;
 	keybits_t mask;
 	int i, sym, bit, b;
+	int prev_player = result[IN_BINDTYPE_PLAYER12];
+	int prev_emu = result[IN_BINDTYPE_EMU];
 
 	collect_events(state, NULL, NULL);
 
@@ -984,6 +997,15 @@ static int in_sdl_update(void *drv_data, const int *binds, int *result)
 				result[b] |= binds[IN_BIND_OFFS(sym, b)];
 		}
 	}
+
+#ifdef USE_SDL2
+	if (state->joy && in_sdl_debug_input() &&
+	    (prev_player != result[IN_BINDTYPE_PLAYER12] ||
+	     prev_emu != result[IN_BINDTYPE_EMU])) {
+		fprintf(stderr, "in_sdl: update result player=%08x emu=%08x\n",
+			result[IN_BINDTYPE_PLAYER12], result[IN_BINDTYPE_EMU]);
+	}
+#endif
 
 	return 0;
 }
