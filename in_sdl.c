@@ -397,6 +397,17 @@ struct in_sdl_state {
 
 static void (*ext_event_handler)(void *event);
 
+#ifdef USE_SDL2
+static int in_sdl_debug_input(void)
+{
+	static int enabled = -1;
+
+	if (enabled < 0)
+		enabled = getenv("PICOARCH_SDL_INPUT_DEBUG") != NULL;
+	return enabled;
+}
+#endif
+
 static const char * const in_sdl_keys[IN_SDL_KEY_COUNT] = {
 	[SDLK_BACKSPACE] = "backspace",
 	[SDLK_TAB] = "tab",
@@ -585,13 +596,26 @@ static void in_sdl_probe(const in_drv_t *drv)
 		key_names, 0);
 
 	/* joysticks go here too */
-	SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+	if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) != 0) {
+		fprintf(stderr, "in_sdl: joystick init failed: %s\n", SDL_GetError());
+		return;
+	}
 
 	joycount = SDL_NumJoysticks();
+#ifdef USE_SDL2
+	if (in_sdl_debug_input())
+		fprintf(stderr, "in_sdl: joystick count=%d\n", joycount);
+#endif
 	for (i = 0; i < joycount; i++) {
 		joy = SDL_JoystickOpen(i);
-		if (joy == NULL)
+		if (joy == NULL) {
+#ifdef USE_SDL2
+			if (in_sdl_debug_input())
+				fprintf(stderr, "in_sdl: open joystick %d failed: %s\n",
+					i, SDL_GetError());
+#endif
 			continue;
+		}
 
 		state = calloc(1, sizeof(*state));
 		if (state == NULL) {
@@ -602,6 +626,11 @@ static void in_sdl_probe(const in_drv_t *drv)
 #ifdef USE_SDL2
 		state->joy_id = SDL_JoystickInstanceID(joy);
 		state->joy_index = i;
+		if (in_sdl_debug_input())
+			fprintf(stderr,
+				"in_sdl: opened joystick index=%d instance=%d name=%s axes=%d buttons=%d\n",
+				i, state->joy_id, SDL_JoystickNameForIndex(i),
+				SDL_JoystickNumAxes(joy), SDL_JoystickNumButtons(joy));
 #else
 		state->joy_id = i;
 #endif
@@ -691,6 +720,10 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 	switch (event->type) {
 	case SDL_JOYAXISMOTION:
 #ifdef USE_SDL2
+		if (in_sdl_debug_input())
+			fprintf(stderr, "in_sdl: joy axis which=%d axis=%d value=%d state_id=%d state_index=%d\n",
+				event->jaxis.which, event->jaxis.axis, event->jaxis.value,
+				state->joy_id, state->joy_index);
 		if (event->jaxis.which != state->joy_id &&
 		    event->jaxis.which != state->joy_index)
 			return -2;
@@ -732,6 +765,10 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 	case SDL_JOYBUTTONDOWN:
 	case SDL_JOYBUTTONUP:
 #ifdef USE_SDL2
+		if (in_sdl_debug_input())
+			fprintf(stderr, "in_sdl: joy button which=%d button=%d state=%d state_id=%d state_index=%d\n",
+				event->jbutton.which, event->jbutton.button, event->jbutton.state,
+				state->joy_id, state->joy_index);
 		if (event->jbutton.which != state->joy_id &&
 		    event->jbutton.which != state->joy_index)
 			return -2;
@@ -740,6 +777,11 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 			return -2;
 #endif
 		if (event->jbutton.button >= IN_SDL_JOY_BUTTON_COUNT) {
+#ifdef USE_SDL2
+			if (in_sdl_debug_input())
+				fprintf(stderr, "in_sdl: ignored joystick button %d, max supported=%d\n",
+					event->jbutton.button, IN_SDL_JOY_BUTTON_COUNT - 1);
+#endif
 			break;
 		}
 		kc = SDL_JOY_BUTTON(event->jbutton.button);
