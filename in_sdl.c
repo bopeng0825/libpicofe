@@ -382,6 +382,7 @@ static inline int sdl_peep_events_compat(SDL_Event *events, int numevents, SDL_e
 /* should be machine word for best performace */
 typedef unsigned long keybits_t;
 #define KEYBITS_WORD_BITS (sizeof(keybits_t) * 8)
+#define IN_SDL_JOY_AXIS_COUNT 4
 
 struct in_sdl_state {
 	const in_drv_t *drv;
@@ -390,9 +391,9 @@ struct in_sdl_state {
 #ifdef USE_SDL2
 	int joy_index;
 	uint8_t joy_buttons[IN_SDL_JOY_BUTTON_COUNT];
-	int joy_axes[2];
+	int joy_axes[IN_SDL_JOY_AXIS_COUNT];
 #endif
-	int axis_keydown[2];
+	int axis_keydown[IN_SDL_JOY_AXIS_COUNT];
 	keybits_t keystate[IN_SDL_KEY_COUNT / KEYBITS_WORD_BITS + 1];
 	// emulator keys should always be processed immediately lest one is lost
 	keybits_t emu_keys[IN_SDL_KEY_COUNT / KEYBITS_WORD_BITS + 1];
@@ -718,6 +719,7 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 	int *kc_out, int *down_out, int *emu_out)
 {
 	int kc = -1, down = 0, emu = 0, ret = 0;
+	int axis_dir;
 
 	/* TODO: remaining axis */
 	switch (event->type) {
@@ -734,7 +736,7 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 		if (event->jaxis.which != state->joy_id)
 			return -2;
 #endif
-		if (event->jaxis.axis > 1)
+		if (event->jaxis.axis >= IN_SDL_JOY_AXIS_COUNT)
 			break;
 		if (-16384 <= event->jaxis.value && event->jaxis.value <= 16384) {
 			kc = state->axis_keydown[event->jaxis.axis];
@@ -747,7 +749,8 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 				emu |= get_keystate(state->emu_keys, kc);
 				update_keystate(state->keystate, kc, 0);
 			}
-			kc = event->jaxis.axis ? SDLK_UP : SDLK_LEFT;
+			axis_dir = event->jaxis.axis & 1;
+			kc = axis_dir ? SDLK_UP : SDLK_LEFT;
 			state->axis_keydown[event->jaxis.axis] = kc;
 			down = 1;
 			ret = 1;
@@ -758,7 +761,8 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 				emu |= get_keystate(state->emu_keys, kc);
 				update_keystate(state->keystate, kc, 0);
 			}
-			kc = event->jaxis.axis ? SDLK_DOWN : SDLK_RIGHT;
+			axis_dir = event->jaxis.axis & 1;
+			kc = axis_dir ? SDLK_DOWN : SDLK_RIGHT;
 			state->axis_keydown[event->jaxis.axis] = kc;
 			down = 1;
 			ret = 1;
@@ -839,12 +843,13 @@ static int poll_joy_state(struct in_sdl_state *state, int *one_kc, int *one_down
 	SDL_JoystickUpdate();
 
 	axes = SDL_JoystickNumAxes(state->joy);
-	if (axes > 2)
-		axes = 2;
+	if (axes > IN_SDL_JOY_AXIS_COUNT)
+		axes = IN_SDL_JOY_AXIS_COUNT;
 
 	for (i = 0; i < axes; i++) {
 		int value = SDL_JoystickGetAxis(state->joy, i);
 		int dir = 0;
+		int axis_dir = i & 1;
 		int kc;
 
 		if (value < -16384)
@@ -856,8 +861,8 @@ static int poll_joy_state(struct in_sdl_state *state, int *one_kc, int *one_down
 			continue;
 
 		if (state->joy_axes[i] != 0) {
-			kc = i ? (state->joy_axes[i] < 0 ? SDLK_UP : SDLK_DOWN)
-			       : (state->joy_axes[i] < 0 ? SDLK_LEFT : SDLK_RIGHT);
+			kc = axis_dir ? (state->joy_axes[i] < 0 ? SDLK_UP : SDLK_DOWN)
+				      : (state->joy_axes[i] < 0 ? SDLK_LEFT : SDLK_RIGHT);
 			if (update_joy_key(state, kc, 0, one_kc, one_down))
 				return 1;
 			ret = 1;
@@ -865,8 +870,11 @@ static int poll_joy_state(struct in_sdl_state *state, int *one_kc, int *one_down
 
 		state->joy_axes[i] = dir;
 		if (dir != 0) {
-			kc = i ? (dir < 0 ? SDLK_UP : SDLK_DOWN)
-			       : (dir < 0 ? SDLK_LEFT : SDLK_RIGHT);
+			kc = axis_dir ? (dir < 0 ? SDLK_UP : SDLK_DOWN)
+				      : (dir < 0 ? SDLK_LEFT : SDLK_RIGHT);
+			if (in_sdl_debug_input())
+				fprintf(stderr, "in_sdl: polled joy axis axis=%d value=%d dir=%d\n",
+					i, value, dir);
 			if (update_joy_key(state, kc, 1, one_kc, one_down))
 				return 1;
 			ret = 1;
