@@ -386,6 +386,9 @@ struct in_sdl_state {
 	const in_drv_t *drv;
 	SDL_Joystick *joy;
 	int joy_id;
+#ifdef USE_SDL2
+	int joy_index;
+#endif
 	int axis_keydown[2];
 	keybits_t keystate[IN_SDL_KEY_COUNT / KEYBITS_WORD_BITS + 1];
 	// emulator keys should always be processed immediately lest one is lost
@@ -598,6 +601,7 @@ static void in_sdl_probe(const in_drv_t *drv)
 		state->joy = joy;
 #ifdef USE_SDL2
 		state->joy_id = SDL_JoystickInstanceID(joy);
+		state->joy_index = i;
 #else
 		state->joy_id = i;
 #endif
@@ -686,8 +690,14 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 	/* TODO: remaining axis */
 	switch (event->type) {
 	case SDL_JOYAXISMOTION:
+#ifdef USE_SDL2
+		if (event->jaxis.which != state->joy_id &&
+		    event->jaxis.which != state->joy_index)
+			return -2;
+#else
 		if (event->jaxis.which != state->joy_id)
 			return -2;
+#endif
 		if (event->jaxis.axis > 1)
 			break;
 		if (-16384 <= event->jaxis.value && event->jaxis.value <= 16384) {
@@ -721,8 +731,14 @@ static int handle_joy_event(struct in_sdl_state *state, SDL_Event *event,
 
 	case SDL_JOYBUTTONDOWN:
 	case SDL_JOYBUTTONUP:
+#ifdef USE_SDL2
+		if (event->jbutton.which != state->joy_id &&
+		    event->jbutton.which != state->joy_index)
+			return -2;
+#else
 		if (event->jbutton.which != state->joy_id)
 			return -2;
+#endif
 		if (event->jbutton.button >= IN_SDL_JOY_BUTTON_COUNT) {
 			break;
 		}
