@@ -170,6 +170,9 @@ extern int g_autostateld_opt;
 void menu_init_base(void);
 void menu_update_msg(const char *msg);
 void text_out16(int x, int y, const char *texto, ...);
+#ifdef MENU_TEST
+void menu_test_draw_entries(const menu_entry *entries, int selection);
+#endif
 
 menu_entry *me_list_get_first(void);
 menu_entry *me_list_get_next(void);

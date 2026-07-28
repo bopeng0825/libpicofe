@@ -850,6 +850,14 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	menu_draw_end();
 }
 
+#ifdef MENU_TEST
+void menu_test_draw_entries(const menu_entry *entries, int selection)
+{
+	me_draw(entries, selection, NULL);
+}
+#endif
+
+#ifndef MENU_TEST_DRAW_ONLY
 static int me_process(menu_entry *entry, int is_next, int is_lr)
 {
 	const char **names;
@@ -1805,4 +1813,5 @@ static void key_config_loop(const me_bind_action *opts, int opt_cnt, int player_
 			dev_id = bind_dev_id;
 	}
 }
+#endif
 
