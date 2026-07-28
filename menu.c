@@ -985,10 +985,13 @@ static void draw_menu_message(const char *msg, void (*draw_more)(void))
 {
 	int x, y, h, w, wt;
 	const char *p;
+#ifdef USE_SDL2
 	char line[256];
+#endif
 
 	p = msg;
 	for (h = 1, w = 0; *p != 0; h++) {
+#ifdef USE_SDL2
 		size_t length = strcspn(p, "\n");
 		if (length >= sizeof(line))
 			length = sizeof(line) - 1;
@@ -996,6 +999,10 @@ static void draw_menu_message(const char *msg, void (*draw_more)(void))
 		line[length] = 0;
 		wt = menu_text_width(line, 0);
 		p += strcspn(p, "\n");
+#else
+		for (wt = 0; *p != 0 && *p != '\n'; p++)
+			wt++;
+#endif
 
 		if (wt > w)
 			w = wt;
@@ -1004,7 +1011,11 @@ static void draw_menu_message(const char *msg, void (*draw_more)(void))
 		p++;
 	}
 
+#ifdef USE_SDL2
 	x = g_menuscreen_w / 2 - w / 2;
+#else
+	x = g_menuscreen_w / 2 - w * me_mfont_w / 2;
+#endif
 	y = g_menuscreen_h / 2 - h * me_mfont_h / 2;
 	if (x < 0) x = 0;
 	if (y < 0) y = 0;
