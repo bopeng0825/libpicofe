@@ -102,8 +102,8 @@ static int menu_text_width(const char *text, int small)
 	if (menu_sdl2_available())
 		return menu_sdl2_text_width(small ? MENU_FONT_SMALL :
 					   MENU_FONT_MAIN, text);
-	return (int)menu_utf8_cells(text) *
-	       (small ? me_sfont_w : me_mfont_w);
+	return menu_bitmap_text_width(text,
+	       small ? me_sfont_w : me_mfont_w);
 #else
 	return (int)strlen(text) * (small ? me_sfont_w : me_mfont_w);
 #endif
