@@ -38,46 +38,75 @@ typedef struct
 	const char * (*generate_name)(int id, int *offs);
 	const void *data;
 	const char *help;
+	unsigned short name_id;
+	unsigned short help_id;
 } menu_entry;
 
 #define mee_handler_id_h(name, id, handler, help) \
-	{ name, MB_NONE, id, NULL, 0, 0, 0, 1, 0, 1, handler, NULL, NULL, help }
+	{ name, MB_NONE, id, NULL, 0, 0, 0, 1, 0, 1, handler, NULL, NULL, help, 0, 0 }
+
+#define mee_handler_id_h_t(name_id, id, handler, help) \
+	{ NULL, MB_NONE, id, NULL, 0, 0, 0, 1, 0, 1, handler, NULL, NULL, help, name_id, 0 }
 
 #define mee_handler_id(name, id, handler) \
 	mee_handler_id_h(name, id, handler, NULL)
 
+#define mee_handler_id_t(name_id, id, handler) \
+	mee_handler_id_h_t(name_id, id, handler, NULL)
+
 #define mee_handler(name, handler) \
 	mee_handler_id(name, MA_NONE, handler)
+
+#define mee_handler_t(name_id, handler) \
+	mee_handler_id_t(name_id, MA_NONE, handler)
 
 #define mee_handler_h(name, handler, help) \
 	mee_handler_id_h(name, MA_NONE, handler, help)
 
+#define mee_handler_h_t(name_id, handler, help) \
+	mee_handler_id_h_t(name_id, MA_NONE, handler, help)
+
 #define mee_label(name) \
-	{ name, MB_NONE, MA_NONE, NULL, 0, 0, 0, 1, 0, 0, NULL, NULL, NULL, NULL }
+	{ name, MB_NONE, MA_NONE, NULL, 0, 0, 0, 1, 0, 0, NULL, NULL, NULL, NULL, 0, 0 }
 
 #define mee_label_mk(id, name_func) \
-	{ "", MB_NONE, id, NULL, 0, 0, 0, 1, 0, 0, NULL, name_func, NULL, NULL }
+	{ "", MB_NONE, id, NULL, 0, 0, 0, 1, 0, 0, NULL, name_func, NULL, NULL, 0, 0 }
 
 #define mee_onoff_h(name, id, var, mask, help) \
-	{ name, MB_OPT_ONOFF, id, &(var), mask, 0, 0, 1, 1, 1, NULL, NULL, NULL, help }
+	{ name, MB_OPT_ONOFF, id, &(var), mask, 0, 0, 1, 1, 1, NULL, NULL, NULL, help, 0, 0 }
+
+#define mee_onoff_h_t(name_id, id, var, mask, help) \
+	{ NULL, MB_OPT_ONOFF, id, &(var), mask, 0, 0, 1, 1, 1, NULL, NULL, NULL, help, name_id, 0 }
 
 #define mee_onoff(name, id, var, mask) \
 	mee_onoff_h(name, id, var, mask, NULL)
 
+#define mee_onoff_t(name_id, id, var, mask) \
+	mee_onoff_h_t(name_id, id, var, mask, NULL)
+
 #define mee_range_h(name, id, var, min, max, help) \
-	{ name, MB_OPT_RANGE, id, &(var), 0, min, max, 1, 1, 1, NULL, NULL, NULL, help }
+	{ name, MB_OPT_RANGE, id, &(var), 0, min, max, 1, 1, 1, NULL, NULL, NULL, help, 0, 0 }
+
+#define mee_range_h_t(name_id, id, var, min, max, help) \
+	{ NULL, MB_OPT_RANGE, id, &(var), 0, min, max, 1, 1, 1, NULL, NULL, NULL, help, name_id, 0 }
 
 #define mee_range(name, id, var, min, max) \
 	mee_range_h(name, id, var, min, max, NULL)
 
 #define mee_range_hide(name, id, var, min, max) \
-	{ name, MB_OPT_RANGE, id, &(var), 0, min, max, 0, 1, 0, NULL, NULL, NULL, NULL }
+	{ name, MB_OPT_RANGE, id, &(var), 0, min, max, 0, 1, 0, NULL, NULL, NULL, NULL, 0, 0 }
 
 #define mee_cust_s_h(name, id, need_save, handler, name_func, help) \
-	{ name, MB_OPT_CUSTOM, id, NULL, 0, 0, 0, 1, need_save, 1, handler, name_func, NULL, help }
+	{ name, MB_OPT_CUSTOM, id, NULL, 0, 0, 0, 1, need_save, 1, handler, name_func, NULL, help, 0, 0 }
+
+#define mee_cust_s_h_t(name_id, id, need_save, handler, name_func, help) \
+	{ NULL, MB_OPT_CUSTOM, id, NULL, 0, 0, 0, 1, need_save, 1, handler, name_func, NULL, help, name_id, 0 }
 
 #define mee_cust_h(name, id, handler, name_func, help) \
 	mee_cust_s_h(name, id, 1, handler, name_func, help)
+
+#define mee_cust_h_t(name_id, id, handler, name_func, help) \
+	mee_cust_s_h_t(name_id, id, 1, handler, name_func, help)
 
 #define mee_cust(name, id, handler, name_func) \
 	mee_cust_h(name, id, handler, name_func, NULL)
@@ -85,23 +114,36 @@ typedef struct
 #define mee_cust_nosave(name, id, handler, name_func) \
 	mee_cust_s_h(name, id, 0, handler, name_func, NULL)
 
+#define mee_cust_nosave_t(name_id, id, handler, name_func) \
+	mee_cust_s_h_t(name_id, id, 0, handler, name_func, NULL)
+
 #define mee_onoff_cust(name, id, var, mask, name_func) \
-	{ name, MB_OPT_CUSTONOFF, id, &(var), mask, 0, 0, 1, 1, 1, NULL, name_func, NULL, NULL }
+	{ name, MB_OPT_CUSTONOFF, id, &(var), mask, 0, 0, 1, 1, 1, NULL, name_func, NULL, NULL, 0, 0 }
 
 #define mee_range_cust_h(name, id, var, min, max, name_func, help) \
-	{ name, MB_OPT_CUSTRANGE, id, &(var), 0, min, max, 1, 1, 1, NULL, name_func, NULL, help }
+	{ name, MB_OPT_CUSTRANGE, id, &(var), 0, min, max, 1, 1, 1, NULL, name_func, NULL, help, 0, 0 }
 
 #define mee_range_cust(name, id, var, min, max, name_func) \
 	mee_range_cust_h(name, id, var, min, max, name_func, NULL)
 
 #define mee_enum_h(name, id, var, names_list, help) \
-	{ name, MB_OPT_ENUM, id, &(var), 0, 0, 0, 1, 1, 1, NULL, NULL, names_list, help }
+	{ name, MB_OPT_ENUM, id, &(var), 0, 0, 0, 1, 1, 1, NULL, NULL, names_list, help, 0, 0 }
+
+#define mee_enum_h_t(name_id, id, var, names_list, help) \
+	{ NULL, MB_OPT_ENUM, id, &(var), 0, 0, 0, 1, 1, 1, NULL, NULL, names_list, help, name_id, 0 }
 
 #define mee_enum(name, id, var, names_list) \
 	mee_enum_h(name, id, var, names_list, NULL)
 
 #define mee_end \
-	{ NULL, 0, 0, NULL, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL }
+	{ NULL, 0, 0, NULL, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL, NULL, 0, 0 }
+
+#ifdef MENU_TRANSLATION_IDS
+const char *menu_translate(unsigned short text_id);
+#endif
+
+const char *menu_entry_name(const menu_entry *entry);
+const char *menu_entry_help(const menu_entry *entry);
 
 typedef struct
 {

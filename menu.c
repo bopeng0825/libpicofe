@@ -24,6 +24,11 @@
 #include "plat.h"
 #include "posix.h"
 
+#ifdef USE_SDL2
+#include "menu_layout.h"
+#include "menu_sdl2.h"
+#endif
+
 #if defined(__GNUC__) && __GNUC__ >= 7
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
@@ -53,18 +58,91 @@ static unsigned char *menu_font_data = NULL;
 static int menu_text_color = 0xfffe; // default to white
 static int menu_sel_color = -1; // disabled
 
-/* note: these might become non-constant in future */
 #if MENU_X2
-static const int me_mfont_w = 16, me_mfont_h = 20;
-static const int me_sfont_w = 12, me_sfont_h = 20;
+static int me_mfont_w = 16, me_mfont_h = 20;
+static int me_sfont_w = 12, me_sfont_h = 20;
 #else
-static const int me_mfont_w = 8, me_mfont_h = 10;
-static const int me_sfont_w = 6, me_sfont_h = 10;
+static int me_mfont_w = 8, me_mfont_h = 10;
+static int me_sfont_w = 6, me_sfont_h = 10;
 #endif
 
 static int g_menu_filter_off;
 static int g_border_style;
 static int border_left, border_right, border_top, border_bottom;
+
+const char *menu_entry_name(const menu_entry *entry)
+{
+#ifdef MENU_TRANSLATION_IDS
+	if (entry->name_id != 0)
+		return menu_translate(entry->name_id);
+#endif
+	return entry->name;
+}
+
+const char *menu_entry_help(const menu_entry *entry)
+{
+#ifdef MENU_TRANSLATION_IDS
+	if (entry->help_id != 0)
+		return menu_translate(entry->help_id);
+#endif
+	return entry->help;
+}
+
+static int menu_entry_present(const menu_entry *entry)
+{
+	return entry->name != NULL || entry->name_id != 0;
+}
+
+static int menu_text_width(const char *text, int small)
+{
+#ifdef USE_SDL2
+	if (menu_sdl2_available())
+		return menu_sdl2_text_width(small ? MENU_FONT_SMALL :
+					   MENU_FONT_MAIN, text);
+	return (int)menu_utf8_cells(text) *
+	       (small ? me_sfont_w : me_mfont_w);
+#else
+	return (int)strlen(text) * (small ? me_sfont_w : me_mfont_w);
+#endif
+}
+
+static void menu_text_fit(const char *text, int max_pixels,
+			  char *out, size_t out_size, int small)
+{
+	size_t cells;
+#ifndef USE_SDL2
+	size_t line_len;
+#endif
+
+	if (out_size == 0)
+		return;
+#ifdef USE_SDL2
+	menu_utf8_truncate_cells(text, (size_t)-1, out, out_size);
+	{
+		char *newline = strchr(out, '\n');
+		if (newline != NULL)
+			*newline = 0;
+	}
+#else
+	line_len = strcspn(text, "\n");
+	if (line_len >= out_size)
+		line_len = out_size - 1;
+	memcpy(out, text, line_len);
+	out[line_len] = 0;
+#endif
+
+#ifdef USE_SDL2
+	cells = menu_utf8_cells(out);
+	while (cells > 0 && menu_text_width(out, small) > max_pixels) {
+		cells--;
+		menu_utf8_truncate_cells(text, cells, out, out_size);
+	}
+#else
+	cells = (size_t)(max_pixels / (small ? me_sfont_w : me_mfont_w));
+	if (line_len > cells)
+		out[cells] = 0;
+#endif
+}
 
 void menuscreen_memset_lines(unsigned short *dst, int c, int l)
 {
@@ -77,6 +155,26 @@ static void text_out16_(int x, int y, const char *text, int color)
 {
 	int i, lh, tr, tg, tb, len;
 	unsigned short *dest = (unsigned short *)g_menuscreen_ptr + x + y * g_menuscreen_pp;
+
+#ifdef USE_SDL2
+	if (menu_sdl2_available()) {
+		const char *draw_text = text == (void *)1 ? ">" : text;
+		int width;
+
+		menu_sdl2_draw_text(g_menuscreen_ptr, g_menuscreen_pp,
+				   MENU_FONT_MAIN, x, y, color, draw_text);
+		width = menu_sdl2_text_width(MENU_FONT_MAIN, draw_text);
+		if (x < border_left)
+			border_left = x;
+		if (x + width > border_right)
+			border_right = x + width;
+		if (y < border_top)
+			border_top = y;
+		if (y + me_mfont_h > border_bottom)
+			border_bottom = y + me_mfont_h;
+		return;
+	}
+#endif
 	tr = (color & 0xf800) >> 8;
 	tg = (color & 0x07e0) >> 3;
 	tb = (color & 0x001f) << 3;
@@ -145,25 +243,30 @@ void text_out16(int x, int y, const char *texto, ...)
 {
 	va_list args;
 	char    buffer[256];
-	int     maxw = (g_menuscreen_w - x) / me_mfont_w;
+	char    fitted[256];
+	int     max_pixels = g_menuscreen_w - x;
 
-	if (maxw < 0)
+	if (max_pixels < 0)
 		return;
 
 	va_start(args, texto);
 	vsnprintf(buffer, sizeof(buffer), texto, args);
 	va_end(args);
 
-	if (maxw > sizeof(buffer) - 1)
-		maxw = sizeof(buffer) - 1;
-	buffer[maxw] = 0;
-
-	text_out16_(x,y,buffer,menu_text_color);
+	menu_text_fit(buffer, max_pixels, fitted, sizeof(fitted), 0);
+	text_out16_(x, y, fitted, menu_text_color);
 }
 
 /* draws in 6x8 font, might multiply size by integer */
 static void smalltext_out16_(int x, int y, const char *texto, int color)
 {
+#ifdef USE_SDL2
+	if (menu_sdl2_available()) {
+		menu_sdl2_draw_text(g_menuscreen_ptr, g_menuscreen_pp,
+				   MENU_FONT_SMALL, x, y, color, texto);
+		return;
+	}
+#endif
 	unsigned char  *src;
 	unsigned short *dst;
 	int multiplier = me_sfont_w / 6;
@@ -203,15 +306,12 @@ static void smalltext_out16_(int x, int y, const char *texto, int color)
 static void smalltext_out16(int x, int y, const char *texto, int color)
 {
 	char buffer[128];
-	int maxw = (g_menuscreen_w - x) / me_sfont_w;
+	int max_pixels = g_menuscreen_w - x;
 
-	if (maxw < 0)
+	if (max_pixels < 0)
 		return;
 
-	strncpy(buffer, texto, sizeof(buffer));
-	if (maxw > sizeof(buffer) - 1)
-		maxw = sizeof(buffer) - 1;
-	buffer[maxw] = 0;
+	menu_text_fit(texto, max_pixels, buffer, sizeof(buffer), 1);
 
 	smalltext_out16_(x, y, buffer, color);
 }
@@ -355,6 +455,15 @@ void menu_init_base(void)
 
 	// use user's locale for savestate date display
 	setlocale(LC_TIME, "");
+
+#ifdef USE_SDL2
+	if (menu_sdl2_available()) {
+		me_mfont_h = menu_sdl2_line_height(MENU_FONT_MAIN);
+		me_sfont_h = menu_sdl2_line_height(MENU_FONT_SMALL);
+		me_mfont_w = menu_sdl2_text_width(MENU_FONT_MAIN, "M");
+		me_sfont_w = menu_sdl2_text_width(MENU_FONT_SMALL, "M");
+	}
+#endif
 }
 
 static void menu_darken_bg(void *dst, void *src, int pixels, int darker)
@@ -469,7 +578,7 @@ static void menu_separation(void)
 static int me_id2offset(const menu_entry *ent, menu_id id)
 {
 	int i;
-	for (i = 0; ent->name; ent++, i++)
+	for (i = 0; menu_entry_present(ent); ent++, i++)
 		if (ent->id == id) return i;
 
 	lprintf("%s: id %i not found\n", __FUNCTION__, id);
@@ -486,7 +595,7 @@ static int me_count(const menu_entry *ent)
 {
 	int ret;
 
-	for (ret = 0; ent->name; ent++, ret++)
+	for (ret = 0; menu_entry_present(ent); ent++, ret++)
 		;
 
 	return ret;
@@ -524,7 +633,7 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	int i, n;
 
 	/* calculate size of menu rect */
-	for (ent = entries, i = n = 0; ent->name; ent++, i++)
+	for (ent = entries, i = n = 0; menu_entry_present(ent); ent++, i++)
 	{
 		int wt;
 
@@ -536,12 +645,12 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 			vi_sel_ln = n;
 		}
 
-		name = NULL;
-		wt = strlen(ent->name) * me_mfont_w;
+		name = menu_entry_name(ent);
+		wt = menu_text_width(name != NULL ? name : "", 0);
 		if (wt == 0 && ent->generate_name)
 			name = ent->generate_name(ent->id, &offs);
 		if (name != NULL)
-			wt = strlen(name) * me_mfont_w;
+			wt = menu_text_width(name, 0);
 
 		if (ent->beh != MB_NONE)
 		{
@@ -564,11 +673,22 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 				if (ent->generate_name != NULL)
 					name = ent->generate_name(ent->id, &offs);
 				if (name != NULL)
-					wt += (strlen(name) + offs) * me_mfont_w;
+					wt += menu_text_width(name, 0) +
+					      offs * me_mfont_w;
 				break;
-			case MB_OPT_ENUM:
-				wt += 10 * me_mfont_w;
+			case MB_OPT_ENUM: {
+				const char **names = (const char **)ent->data;
+				int value_width = 0;
+				int j;
+
+				for (j = 0; names[j] != NULL; j++) {
+					int width = menu_text_width(names[j], 0);
+					if (width > value_width)
+						value_width = width;
+				}
+				wt += value_width;
 				break;
+			}
 			}
 		}
 
@@ -599,7 +719,7 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	menu_draw_selection(x, y + vi_sel_ln * me_mfont_h, w);
 	x += me_mfont_w * 2;
 
-	for (ent = entries; ent->name; ent++)
+	for (ent = entries; menu_entry_present(ent); ent++)
 	{
 		const char **names;
 		int len, leftname_end = 0;
@@ -607,21 +727,27 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 		if (!ent->enabled)
 			continue;
 
-		name = ent->name;
-		if (strlen(name) == 0) {
+		name = menu_entry_name(ent);
+		if (name != NULL && name[0] == 0) {
 			if (ent->generate_name)
 				name = ent->generate_name(ent->id, &offs);
 		}
 		if (name != NULL) {
-			text_out16(x, y, name);
-			leftname_end = x + (strlen(name) + 1) * me_mfont_w;
+			text_out16(x, y, "%s", name);
+			leftname_end = x + menu_text_width(name, 0) + me_mfont_w;
 		}
 
 		switch (ent->beh) {
 		case MB_NONE:
 			break;
 		case MB_OPT_ONOFF:
-			text_out16(x + col2_offs, y, me_read_onoff(ent) ? "ON" : "OFF");
+#ifdef MENU_TRANSLATION_IDS
+			text_out16(x + col2_offs, y, "%s",
+				menu_translate(me_read_onoff(ent) ? 0 : 1));
+#else
+			text_out16(x + col2_offs, y,
+				me_read_onoff(ent) ? "ON" : "OFF");
+#endif
 			break;
 		case MB_OPT_RANGE:
 			text_out16(x + col2_offs, y, "%i", *(int *)ent->var);
@@ -638,11 +764,15 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 			break;
 		case MB_OPT_ENUM:
 			names = (const char **)ent->data;
+			len = 0;
 			for (i = 0; names[i] != NULL; i++) {
-				offs = x + col2_offs;
-				len = strlen(names[i]);
-				if (len > 10)
-					offs += (10 - len - 2) * me_mfont_w;
+				int width = menu_text_width(names[i], 0);
+				if (width > len)
+					len = width;
+			}
+			for (i = 0; names[i] != NULL; i++) {
+				offs = x + col2_offs + len -
+				       menu_text_width(names[i], 0);
 				if (offs < leftname_end)
 					offs = leftname_end;
 				if (i == *(unsigned char *)ent->var) {
@@ -662,20 +792,22 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	h = (g_menuscreen_h - h) / 2; // bottom area height
 	if (menu_error_msg[0] != 0) {
 		if (h >= me_mfont_h + 4)
-			text_out16(5, g_menuscreen_h - me_mfont_h - 4, menu_error_msg);
+			text_out16(5, g_menuscreen_h - me_mfont_h - 4,
+				   "%s", menu_error_msg);
 		else
 			lprintf("menu msg doesn't fit!\n");
 
 		if (plat_get_ticks_ms() - menu_error_time > 2048)
 			menu_error_msg[0] = 0;
 	}
-	else if (ent_sel->help != NULL) {
-		const char *tmp = ent_sel->help;
+	else if (menu_entry_help(ent_sel) != NULL) {
+		const char *help = menu_entry_help(ent_sel);
+		const char *tmp = help;
 		int l;
 		for (l = 0; tmp != NULL && *tmp != 0; l++)
 			tmp = strchr(tmp + 1, '\n');
 		if (h >= l * me_sfont_h + 4)
-			for (tmp = ent_sel->help; l > 0; l--, tmp = strchr(tmp, '\n') + 1)
+			for (tmp = help; l > 0; l--, tmp = strchr(tmp, '\n') + 1)
 				smalltext_out16(5, g_menuscreen_h - (l * me_sfont_h + 4), tmp, 0xffff);
 	}
 
@@ -804,11 +936,17 @@ static void draw_menu_message(const char *msg, void (*draw_more)(void))
 {
 	int x, y, h, w, wt;
 	const char *p;
+	char line[256];
 
 	p = msg;
 	for (h = 1, w = 0; *p != 0; h++) {
-		for (wt = 0; *p != 0 && *p != '\n'; p++)
-			wt++;
+		size_t length = strcspn(p, "\n");
+		if (length >= sizeof(line))
+			length = sizeof(line) - 1;
+		memcpy(line, p, length);
+		line[length] = 0;
+		wt = menu_text_width(line, 0);
+		p += strcspn(p, "\n");
 
 		if (wt > w)
 			w = wt;
@@ -817,7 +955,7 @@ static void draw_menu_message(const char *msg, void (*draw_more)(void))
 		p++;
 	}
 
-	x = g_menuscreen_w / 2 - w * me_mfont_w / 2;
+	x = g_menuscreen_w / 2 - w / 2;
 	y = g_menuscreen_h / 2 - h * me_mfont_h / 2;
 	if (x < 0) x = 0;
 	if (y < 0) y = 0;
@@ -825,7 +963,7 @@ static void draw_menu_message(const char *msg, void (*draw_more)(void))
 	menu_draw_begin(1, 0);
 
 	for (p = msg; *p != 0 && y <= g_menuscreen_h - me_mfont_h; y += me_mfont_h) {
-		text_out16(x, y, p);
+		text_out16(x, y, "%s", p);
 
 		for (; *p != 0 && *p != '\n'; p++)
 			;
@@ -845,29 +983,39 @@ static void draw_menu_message(const char *msg, void (*draw_more)(void))
 
 static void do_delete(const char *fpath, const char *fname)
 {
-	int len, mid, inp;
+	int len, mid, inp, width;
 	const char *nm;
 	char tmp[64];
 
 	menu_draw_begin(1, 0);
 
-	len = strlen(fname);
-	if (len > g_menuscreen_w / me_sfont_w)
-		len = g_menuscreen_w / me_sfont_w;
+	width = menu_text_width(fname, 1);
+	if (width > g_menuscreen_w)
+		width = g_menuscreen_w;
 
 	mid = g_menuscreen_w / 2;
-	text_out16(mid - me_mfont_w * 15 / 2,  8 * me_mfont_h, "About to delete");
-	smalltext_out16(mid - len * me_sfont_w / 2, 9 * me_mfont_h + 5, fname, 0xbdff);
-	text_out16(mid - me_mfont_w * 13 / 2, 11 * me_mfont_h, "Are you sure?");
+#ifdef MENU_TRANSLATION_IDS
+	text_out16(mid - menu_text_width(menu_translate(UI_TEXT_ABOUT_TO_DELETE), 0) / 2,
+		   8 * me_mfont_h, "%s", menu_translate(UI_TEXT_ABOUT_TO_DELETE));
+	smalltext_out16(mid - width / 2, 9 * me_mfont_h + 5, fname, 0xbdff);
+	text_out16(mid - menu_text_width(menu_translate(UI_TEXT_ARE_YOU_SURE), 0) / 2,
+		   11 * me_mfont_h, "%s", menu_translate(UI_TEXT_ARE_YOU_SURE));
+#else
+	text_out16(mid - menu_text_width("About to " "delete", 0) / 2,
+		   8 * me_mfont_h, "About to " "delete");
+	smalltext_out16(mid - width / 2, 9 * me_mfont_h + 5, fname, 0xbdff);
+	text_out16(mid - menu_text_width("Are you " "sure?", 0) / 2,
+		   11 * me_mfont_h, "Are you " "sure?");
+#endif
 
 	nm = in_get_key_name(-1, -PBTN_MA3);
 	snprintf(tmp, sizeof(tmp), "(%s - confirm, ", nm);
 	len = strlen(tmp);
 	nm = in_get_key_name(-1, -PBTN_MBACK);
 	snprintf(tmp + len, sizeof(tmp) - len, "%s - cancel)", nm);
-	len = strlen(tmp);
 
-	text_out16(mid - me_mfont_w * len / 2, 12 * me_mfont_h, tmp);
+	text_out16(mid - menu_text_width(tmp, 0) / 2, 12 * me_mfont_h,
+		   "%s", tmp);
 	menu_draw_end();
 
 	while (in_menu_wait_any(NULL, 50) & (PBTN_MENU|PBTN_MA2));
@@ -1227,11 +1375,31 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 {
 	int i, x, y, w, h;
 	char time_buf[32];
+	char slot_buf[64];
+	const char *title;
 
 	if (state_slot_flags & (1 << menu_sel))
 		draw_savestate_bg(menu_sel);
 
-	w = (13 + 2) * me_mfont_w;
+#ifdef MENU_TRANSLATION_IDS
+	title = menu_translate(is_loading ? UI_TEXT_LOAD_STATE_TITLE :
+			       UI_TEXT_SAVE_STATE_TITLE);
+#else
+	title = is_loading ? "Load " "state" : "Save " "state";
+#endif
+	w = menu_text_width(title, 0);
+	for (i = 0; i < STATE_SLOT_COUNT; i++) {
+#ifdef MENU_TRANSLATION_IDS
+		snprintf(slot_buf, sizeof(slot_buf), menu_translate(UI_TEXT_SLOT_FMT),
+			 i, "00/00/00 00:00");
+#else
+		snprintf(slot_buf, sizeof(slot_buf), "SLOT %i (%s)",
+			 i, "00/00/00 00:00");
+#endif
+		if (menu_text_width(slot_buf, 0) > w)
+			w = menu_text_width(slot_buf, 0);
+	}
+	w += me_mfont_w * 2;
 	h = (1+2+STATE_SLOT_COUNT+1) * me_mfont_h;
 	x = g_menuscreen_w / 2 - w / 2;
 	if (x < 0) x = 0;
@@ -1244,10 +1412,11 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 
 	menu_draw_begin(1, 1);
 
-	text_out16(x, y, is_loading ? "Load state" : "Save state");
+	text_out16(x, y, "%s", title);
 	y += 3 * me_mfont_h;
 
-	menu_draw_selection(x - me_mfont_w * 2, y + menu_sel * me_mfont_h, (23 + 2) * me_mfont_w + 4);
+	menu_draw_selection(x - me_mfont_w * 2,
+			    y + menu_sel * me_mfont_h, w + 4);
 
 	/* draw all slots */
 	for (i = 0; i < STATE_SLOT_COUNT; i++, y += me_mfont_h)
@@ -1263,9 +1432,17 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 			}
 		}
 
+#ifdef MENU_TRANSLATION_IDS
+		text_out16(x, y, menu_translate(UI_TEXT_SLOT_FMT), i, time_buf);
+#else
 		text_out16(x, y, "SLOT %i (%s)", i, time_buf);
+#endif
 	}
+#ifdef MENU_TRANSLATION_IDS
+	text_out16(x, y, "%s", menu_translate(UI_TEXT_BACK));
+#else
 	text_out16(x, y, "back");
+#endif
 
 	menu_draw_end();
 }
@@ -1304,7 +1481,13 @@ static int menu_loop_savestate(int is_loading)
 			if (menu_sel < STATE_SLOT_COUNT) {
 				state_slot = menu_sel;
 				if (emu_save_load_game(is_loading, 0)) {
-					menu_update_msg(is_loading ? "Load failed" : "Save failed");
+#ifdef MENU_TRANSLATION_IDS
+					menu_update_msg(menu_translate(is_loading ?
+						UI_TEXT_LOAD_FAILED : UI_TEXT_SAVE_FAILED));
+#else
+					menu_update_msg(is_loading ? "Load " "failed" :
+							"Save " "failed");
+#endif
 					break;
 				}
 				ret = 1;
@@ -1399,7 +1582,17 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 	const char *dev_name;
 	int x, y, w, i;
 
-	w = ((player_idx >= 0) ? 20 : 30) * me_mfont_w;
+	w = 0;
+	for (i = 0; i < opt_cnt; i++) {
+		snprintf(buff, sizeof(buff), "%s : %s", opts[i].name,
+			 action_binds(player_idx, opts[i].mask, dev_id));
+		if (menu_text_width(buff, 0) > w)
+			w = menu_text_width(buff, 0);
+	}
+	if (w < 30 * me_mfont_w)
+		w = 30 * me_mfont_w;
+	if (w > g_menuscreen_w - 2 * me_mfont_w)
+		w = g_menuscreen_w - 2 * me_mfont_w;
 	x = g_menuscreen_w / 2 - w / 2;
 	y = (g_menuscreen_h - 4 * me_mfont_h) / 2 - (2 + opt_cnt) * me_mfont_h / 2;
 	if (x < me_mfont_w * 2)
@@ -1407,10 +1600,21 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 	if (y < 0)
 		y = 0;
 	menu_draw_begin(1, 0);
-	if (player_idx >= 0)
+	if (player_idx >= 0) {
+#ifdef MENU_TRANSLATION_IDS
+		text_out16(x, y, menu_translate(UI_TEXT_PLAYER_CONTROLS_FMT),
+			   player_idx + 1);
+#else
 		text_out16(x, y, "Player %i controls", player_idx + 1);
-	else
+#endif
+	}
+	else {
+#ifdef MENU_TRANSLATION_IDS
+		text_out16(x, y, "%s", menu_translate(UI_TEXT_EMULATOR_CONTROLS));
+#else
 		text_out16(x, y, "Emulator controls");
+#endif
+	}
 
 	y += 2 * me_mfont_h;
 	menu_draw_selection(x - me_mfont_w * 2, y + sel * me_mfont_h, w + 2 * me_mfont_w);
@@ -1425,7 +1629,7 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 		dev_name = "(all devices)";
 	else
 		dev_name = in_get_dev_name(dev_id, 0, 1);
-	w = strlen(dev_name) * me_mfont_w;
+	w = menu_text_width(dev_name, 0);
 	if (w < 30 * me_mfont_w)
 		w = 30 * me_mfont_w;
 	if (w > g_menuscreen_w)
@@ -1437,14 +1641,27 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 		snprintf(buff2, sizeof(buff2), "%s", in_get_key_name(-1, -PBTN_MOK));
 		snprintf(buff, sizeof(buff), "%s - bind, %s - clear", buff2,
 				in_get_key_name(-1, -PBTN_MA2));
-		text_out16(x, g_menuscreen_h - 4 * me_mfont_h, buff);
+		text_out16(x, g_menuscreen_h - 4 * me_mfont_h, "%s", buff);
 	}
-	else
-		text_out16(x, g_menuscreen_h - 4 * me_mfont_h, "Press a button to bind/unbind");
+	else {
+#ifdef MENU_TRANSLATION_IDS
+		text_out16(x, g_menuscreen_h - 4 * me_mfont_h, "%s",
+			   menu_translate(UI_TEXT_PRESS_BIND));
+#else
+		text_out16(x, g_menuscreen_h - 4 * me_mfont_h,
+			   "Press a button to " "bind/unbind");
+#endif
+	}
 
 	if (dev_count > 1) {
-		text_out16(x, g_menuscreen_h - 3 * me_mfont_h, dev_name);
-		text_out16(x, g_menuscreen_h - 2 * me_mfont_h, "Press left/right for other devs");
+		text_out16(x, g_menuscreen_h - 3 * me_mfont_h, "%s", dev_name);
+#ifdef MENU_TRANSLATION_IDS
+		text_out16(x, g_menuscreen_h - 2 * me_mfont_h, "%s",
+			   menu_translate(UI_TEXT_PRESS_OTHER_DEVICE));
+#else
+		text_out16(x, g_menuscreen_h - 2 * me_mfont_h,
+			   "Press left/right for " "other devs");
+#endif
 	}
 
 	menu_draw_end();
