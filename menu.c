@@ -109,43 +109,31 @@ static int menu_text_width(const char *text, int small)
 #endif
 }
 
+#ifdef MENU_UTF8_LAYOUT
+static int menu_fit_text_width(const char *text, void *opaque)
+{
+	return menu_text_width(text, *(int *)opaque);
+}
+#endif
+
 static void menu_text_fit(const char *text, int max_pixels,
 			  char *out, size_t out_size, int small)
 {
+#ifdef MENU_UTF8_LAYOUT
+	menu_utf8_fit_width(text, max_pixels, out, out_size,
+			    menu_fit_text_width, &small);
+#else
 	size_t cells;
-#ifndef MENU_UTF8_LAYOUT
 	size_t line_len;
-#endif
 
 	if (out_size == 0)
 		return;
-#ifdef MENU_UTF8_LAYOUT
-	menu_utf8_truncate_cells(text, (size_t)-1, out, out_size);
-	{
-		char *newline = strchr(out, '\n');
-		if (newline != NULL)
-			*newline = 0;
-	}
-#else
 	line_len = strcspn(text, "\n");
 	if (line_len >= out_size)
 		line_len = out_size - 1;
 	memcpy(out, text, line_len);
 	out[line_len] = 0;
-#endif
 
-#ifdef USE_SDL2
-	cells = menu_utf8_cells(out);
-	while (cells > 0 && menu_text_width(out, small) > max_pixels) {
-		cells--;
-		menu_utf8_truncate_cells(text, cells, out, out_size);
-	}
-#elif defined(MENU_UTF8_LAYOUT)
-	cells = (size_t)(max_pixels / (small ? me_sfont_w : me_mfont_w));
-	if (cells > menu_utf8_cells(out))
-		cells = menu_utf8_cells(out);
-	menu_utf8_truncate_cells(text, cells, out, out_size);
-#else
 	cells = (size_t)(max_pixels / (small ? me_sfont_w : me_mfont_w));
 	if (line_len > cells)
 		out[cells] = 0;
