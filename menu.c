@@ -359,6 +359,16 @@ void menu_init_base(void)
 	char buff[256];
 	FILE *f;
 
+	/*
+	 * SDL2 replaces these values with TTF metrics below. Restore the bitmap
+	 * geometry first so a later initialization with an unavailable font does
+	 * not index the fixed-size fallback data using stale TTF dimensions.
+	 */
+	me_mfont_w = MENU_X2 ? 16 : 8;
+	me_mfont_h = MENU_X2 ? 20 : 10;
+	me_sfont_w = MENU_X2 ? 12 : 6;
+	me_sfont_h = MENU_X2 ? 20 : 10;
+
 	if (menu_font_data != NULL)
 		free(menu_font_data);
 
