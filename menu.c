@@ -642,11 +642,20 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 		}
 
 		name = menu_entry_name(ent);
+#ifdef USE_SDL2
 		wt = menu_text_width(name != NULL ? name : "", 0);
+#else
+		wt = strlen(name != NULL ? name : "") * me_mfont_w;
+#endif
 		if (wt == 0 && ent->generate_name)
 			name = ent->generate_name(ent->id, &offs);
-		if (name != NULL)
+		if (name != NULL) {
+#ifdef USE_SDL2
 			wt = menu_text_width(name, 0);
+#else
+			wt = strlen(name) * me_mfont_w;
+#endif
+		}
 
 		if (ent->beh != MB_NONE)
 		{
@@ -668,11 +677,18 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 				offs = 0;
 				if (ent->generate_name != NULL)
 					name = ent->generate_name(ent->id, &offs);
-				if (name != NULL)
+				if (name != NULL) {
+#ifdef USE_SDL2
 					wt += menu_text_width(name, 0) +
 					      offs * me_mfont_w;
+#else
+					wt += (strlen(name) + offs) * me_mfont_w;
+#endif
+				}
 				break;
-			case MB_OPT_ENUM: {
+			case MB_OPT_ENUM:
+#ifdef USE_SDL2
+			{
 				const char **names = (const char **)ent->data;
 				int value_width = 0;
 				int j;
@@ -685,6 +701,10 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 				wt += value_width;
 				break;
 			}
+#else
+				wt += 10 * me_mfont_w;
+				break;
+#endif
 			}
 		}
 
@@ -760,6 +780,7 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 			break;
 		case MB_OPT_ENUM:
 			names = (const char **)ent->data;
+#ifdef USE_SDL2
 			len = 0;
 			for (i = 0; names[i] != NULL; i++) {
 				int width = menu_text_width(names[i], 0);
@@ -776,6 +797,20 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 					break;
 				}
 			}
+#else
+			for (i = 0; names[i] != NULL; i++) {
+				offs = x + col2_offs;
+				len = strlen(names[i]);
+				if (len > 10)
+					offs += (10 - len - 2) * me_mfont_w;
+				if (offs < leftname_end)
+					offs = leftname_end;
+				if (i == *(unsigned char *)ent->var) {
+					text_out16(offs, y, "%s", names[i]);
+					break;
+				}
+			}
+#endif
 			break;
 		}
 
@@ -1371,7 +1406,9 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 {
 	int i, x, y, w, h;
 	char time_buf[32];
+#ifdef USE_SDL2
 	char slot_buf[64];
+#endif
 	const char *title;
 
 	if (state_slot_flags & (1 << menu_sel))
@@ -1383,6 +1420,7 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 #else
 	title = is_loading ? "Load state" : "Save state";
 #endif
+#ifdef USE_SDL2
 	w = menu_text_width(title, 0);
 	for (i = 0; i < STATE_SLOT_COUNT; i++) {
 #ifdef MENU_TRANSLATION_IDS
@@ -1396,6 +1434,9 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 			w = menu_text_width(slot_buf, 0);
 	}
 	w += me_mfont_w * 2;
+#else
+	w = (13 + 2) * me_mfont_w;
+#endif
 	h = (1+2+STATE_SLOT_COUNT+1) * me_mfont_h;
 	x = g_menuscreen_w / 2 - w / 2;
 	if (x < 0) x = 0;
@@ -1411,8 +1452,14 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 	text_out16(x, y, "%s", title);
 	y += 3 * me_mfont_h;
 
+#ifdef USE_SDL2
 	menu_draw_selection(x - me_mfont_w * 2,
 			    y + menu_sel * me_mfont_h, w + 4);
+#else
+	menu_draw_selection(x - me_mfont_w * 2,
+			    y + menu_sel * me_mfont_h,
+			    (23 + 2) * me_mfont_w + 4);
+#endif
 
 	/* draw all slots */
 	for (i = 0; i < STATE_SLOT_COUNT; i++, y += me_mfont_h)
@@ -1578,6 +1625,7 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 	const char *dev_name;
 	int x, y, w, i;
 
+#ifdef USE_SDL2
 	w = 0;
 	for (i = 0; i < opt_cnt; i++) {
 		snprintf(buff, sizeof(buff), "%s : %s", opts[i].name,
@@ -1589,6 +1637,9 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 		w = 30 * me_mfont_w;
 	if (w > g_menuscreen_w - 2 * me_mfont_w)
 		w = g_menuscreen_w - 2 * me_mfont_w;
+#else
+	w = ((player_idx >= 0) ? 20 : 30) * me_mfont_w;
+#endif
 	x = g_menuscreen_w / 2 - w / 2;
 	y = (g_menuscreen_h - 4 * me_mfont_h) / 2 - (2 + opt_cnt) * me_mfont_h / 2;
 	if (x < me_mfont_w * 2)
@@ -1625,7 +1676,11 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 		dev_name = "(all devices)";
 	else
 		dev_name = in_get_dev_name(dev_id, 0, 1);
+#ifdef USE_SDL2
 	w = menu_text_width(dev_name, 0);
+#else
+	w = strlen(dev_name) * me_mfont_w;
+#endif
 	if (w < 30 * me_mfont_w)
 		w = 30 * me_mfont_w;
 	if (w > g_menuscreen_w)
