@@ -24,8 +24,11 @@
 #include "plat.h"
 #include "posix.h"
 
-#ifdef USE_SDL2
+#if defined(USE_SDL2) || defined(MENU_TRANSLATION_IDS)
 #include "menu_layout.h"
+#define MENU_UTF8_LAYOUT 1
+#endif
+#ifdef USE_SDL2
 #include "menu_sdl2.h"
 #endif
 
@@ -110,13 +113,13 @@ static void menu_text_fit(const char *text, int max_pixels,
 			  char *out, size_t out_size, int small)
 {
 	size_t cells;
-#ifndef USE_SDL2
+#ifndef MENU_UTF8_LAYOUT
 	size_t line_len;
 #endif
 
 	if (out_size == 0)
 		return;
-#ifdef USE_SDL2
+#ifdef MENU_UTF8_LAYOUT
 	menu_utf8_truncate_cells(text, (size_t)-1, out, out_size);
 	{
 		char *newline = strchr(out, '\n');
@@ -137,6 +140,11 @@ static void menu_text_fit(const char *text, int max_pixels,
 		cells--;
 		menu_utf8_truncate_cells(text, cells, out, out_size);
 	}
+#elif defined(MENU_UTF8_LAYOUT)
+	cells = (size_t)(max_pixels / (small ? me_sfont_w : me_mfont_w));
+	if (cells > menu_utf8_cells(out))
+		cells = menu_utf8_cells(out);
+	menu_utf8_truncate_cells(text, cells, out, out_size);
 #else
 	cells = (size_t)(max_pixels / (small ? me_sfont_w : me_mfont_w));
 	if (line_len > cells)
@@ -1001,11 +1009,11 @@ static void do_delete(const char *fpath, const char *fname)
 	text_out16(mid - menu_text_width(menu_translate(UI_TEXT_ARE_YOU_SURE), 0) / 2,
 		   11 * me_mfont_h, "%s", menu_translate(UI_TEXT_ARE_YOU_SURE));
 #else
-	text_out16(mid - menu_text_width("About to " "delete", 0) / 2,
-		   8 * me_mfont_h, "About to " "delete");
+	text_out16(mid - menu_text_width("About to delete", 0) / 2,
+		   8 * me_mfont_h, "About to delete");
 	smalltext_out16(mid - width / 2, 9 * me_mfont_h + 5, fname, 0xbdff);
-	text_out16(mid - menu_text_width("Are you " "sure?", 0) / 2,
-		   11 * me_mfont_h, "Are you " "sure?");
+	text_out16(mid - menu_text_width("Are you sure?", 0) / 2,
+		   11 * me_mfont_h, "Are you sure?");
 #endif
 
 	nm = in_get_key_name(-1, -PBTN_MA3);
@@ -1385,7 +1393,7 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 	title = menu_translate(is_loading ? UI_TEXT_LOAD_STATE_TITLE :
 			       UI_TEXT_SAVE_STATE_TITLE);
 #else
-	title = is_loading ? "Load " "state" : "Save " "state";
+	title = is_loading ? "Load state" : "Save state";
 #endif
 	w = menu_text_width(title, 0);
 	for (i = 0; i < STATE_SLOT_COUNT; i++) {
@@ -1485,8 +1493,8 @@ static int menu_loop_savestate(int is_loading)
 					menu_update_msg(menu_translate(is_loading ?
 						UI_TEXT_LOAD_FAILED : UI_TEXT_SAVE_FAILED));
 #else
-					menu_update_msg(is_loading ? "Load " "failed" :
-							"Save " "failed");
+					menu_update_msg(is_loading ? "Load failed" :
+							"Save failed");
 #endif
 					break;
 				}
@@ -1649,7 +1657,7 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 			   menu_translate(UI_TEXT_PRESS_BIND));
 #else
 		text_out16(x, g_menuscreen_h - 4 * me_mfont_h,
-			   "Press a button to " "bind/unbind");
+			   "Press a button to bind/unbind");
 #endif
 	}
 
@@ -1660,7 +1668,7 @@ static void draw_key_config(const me_bind_action *opts, int opt_cnt, int player_
 			   menu_translate(UI_TEXT_PRESS_OTHER_DEVICE));
 #else
 		text_out16(x, g_menuscreen_h - 2 * me_mfont_h,
-			   "Press left/right for " "other devs");
+			   "Press left/right for other devs");
 #endif
 	}
 
