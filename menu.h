@@ -167,6 +167,12 @@ extern int g_menubg_src_pp;
 
 extern int g_autostateld_opt;
 
+#ifdef USE_SDL2
+struct menu_responsive_layout;
+void menu_set_responsive_layout(const struct menu_responsive_layout *layout);
+int menu_get_responsive_layout(struct menu_responsive_layout *layout);
+#endif
+
 void menu_init_base(void);
 void menu_update_msg(const char *msg);
 void text_out16(int x, int y, const char *texto, ...);

@@ -72,6 +72,28 @@ static int me_sfont_w = 6, me_sfont_h = 10;
 static int g_menu_filter_off;
 static int g_border_style;
 static int border_left, border_right, border_top, border_bottom;
+#ifdef USE_SDL2
+static struct menu_responsive_layout responsive_layout;
+static int responsive_layout_active;
+
+void menu_set_responsive_layout(const struct menu_responsive_layout *layout)
+{
+	if (layout == NULL) {
+		responsive_layout_active = 0;
+		return;
+	}
+	responsive_layout = *layout;
+	responsive_layout_active = 1;
+}
+
+int menu_get_responsive_layout(struct menu_responsive_layout *layout)
+{
+	if (!responsive_layout_active || layout == NULL)
+		return 0;
+	*layout = responsive_layout;
+	return 1;
+}
+#endif
 
 const char *menu_entry_name(const menu_entry *entry)
 {
@@ -631,12 +653,19 @@ static void me_toggle_onoff(menu_entry *ent)
 
 static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 {
-	const menu_entry *ent, *ent_sel = entries;
+	const menu_entry *ent;
+#ifndef USE_SDL2
+	const menu_entry *ent_sel = entries;
+#endif
 	int x, y, w = 0, h = 0;
 	int offs, col2_offs = 27 * me_mfont_w;
 	int vi_sel_ln = 0;
 	const char *name;
 	int i, n;
+#ifdef USE_SDL2
+	struct menu_responsive_layout layout;
+	int responsive = menu_get_responsive_layout(&layout);
+#endif
 
 	/* calculate size of menu rect */
 	for (ent = entries, i = n = 0; menu_entry_present(ent); ent++, i++)
@@ -647,7 +676,9 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 			continue;
 
 		if (i == sel) {
+#ifndef USE_SDL2
 			ent_sel = ent;
+#endif
 			vi_sel_ln = n;
 		}
 
@@ -729,13 +760,33 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 		lprintf("width %d > %d\n", w, g_menuscreen_w);
 		w = g_menuscreen_w;
 	}
+#ifdef USE_SDL2
+	if (responsive && h > layout.menu.h) {
+		lprintf("height %d > %d\n", h, layout.menu.h);
+		h = layout.menu.h;
+	}
+	else
+#endif
 	if (h > g_menuscreen_h) {
 		lprintf("height %d > %d\n", w, g_menuscreen_h);
 		h = g_menuscreen_h;
 	}
 
+#ifdef USE_SDL2
+	if (responsive) {
+		x = layout.menu.x + me_mfont_w;
+		if (w > layout.menu.x + layout.menu.w - x)
+			w = layout.menu.x + layout.menu.w - x;
+		y = menu_centered_block_y(layout.menu.y, layout.menu.h, h);
+	}
+	else {
+		x = g_menuscreen_w / 2 - w / 2;
+		y = g_menuscreen_h / 2 - h / 2;
+	}
+#else
 	x = g_menuscreen_w / 2 - w / 2;
 	y = g_menuscreen_h / 2 - h / 2;
+#endif
 #ifdef MENU_ALIGN_LEFT
 	if (x > 12) x = 12;
 #endif
@@ -841,6 +892,7 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 		if (plat_get_ticks_ms() - menu_error_time > 2048)
 			menu_error_msg[0] = 0;
 	}
+#ifndef USE_SDL2
 	else if (menu_entry_help(ent_sel) != NULL) {
 		const char *help = menu_entry_help(ent_sel);
 		const char *tmp = help;
@@ -851,6 +903,7 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 			for (tmp = help; l > 0; l--, tmp = strchr(tmp, '\n') + 1)
 				smalltext_out16(5, g_menuscreen_h - (l * me_sfont_h + 4), tmp, 0xffff);
 	}
+#endif
 
 	menu_separation();
 
