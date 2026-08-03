@@ -75,6 +75,7 @@ static int border_left, border_right, border_top, border_bottom;
 #ifdef USE_SDL2
 static struct menu_responsive_layout responsive_layout;
 static int responsive_layout_active;
+static int menu_text_clip_right;
 
 void menu_set_responsive_layout(const struct menu_responsive_layout *layout)
 {
@@ -262,7 +263,15 @@ void text_out16(int x, int y, const char *texto, ...)
 	va_list args;
 	char    buffer[256];
 	char    fitted[256];
-	int     max_pixels = g_menuscreen_w - x;
+	int     max_pixels;
+#ifdef USE_SDL2
+	int clip_right = menu_text_clip_right > 0 ?
+		menu_text_clip_right : g_menuscreen_w;
+
+	max_pixels = clip_right - x;
+#else
+	max_pixels = g_menuscreen_w - x;
+#endif
 
 	if (max_pixels < 0)
 		return;
@@ -665,6 +674,8 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 #ifdef USE_SDL2
 	struct menu_responsive_layout layout;
 	int responsive = menu_get_responsive_layout(&layout);
+	int visible_first = 0, visible_count = 0;
+	int draw_index = 0;
 #endif
 
 	/* calculate size of menu rect */
@@ -753,7 +764,17 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 			w = wt;
 		n++;
 	}
+#ifdef USE_SDL2
+	if (responsive)
+		menu_visible_window(n, vi_sel_ln,
+				    layout.menu.h / me_mfont_h,
+				    &visible_first, &visible_count);
+	else
+		visible_count = n;
+	h = visible_count * me_mfont_h;
+#else
 	h = n * me_mfont_h;
+#endif
 	w += me_mfont_w * 2; /* selector */
 
 	if (w > g_menuscreen_w) {
@@ -792,8 +813,16 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 #endif
 
 	/* draw */
+#ifdef USE_SDL2
+	menu_text_clip_right = responsive ? layout.menu.x + layout.menu.w :
+		g_menuscreen_w;
+#endif
 	menu_draw_begin(1, 0);
-	menu_draw_selection(x, y + vi_sel_ln * me_mfont_h, w);
+	menu_draw_selection(x,
+#ifdef USE_SDL2
+		responsive ? y + (vi_sel_ln - visible_first) * me_mfont_h :
+#endif
+		y + vi_sel_ln * me_mfont_h, w);
 	x += me_mfont_w * 2;
 
 	for (ent = entries; menu_entry_present(ent); ent++)
@@ -803,6 +832,17 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 
 		if (!ent->enabled)
 			continue;
+#ifdef USE_SDL2
+		if (responsive) {
+			if (draw_index < visible_first) {
+				draw_index++;
+				continue;
+			}
+			if (draw_index >= visible_first + visible_count)
+				break;
+		}
+		draw_index++;
+#endif
 
 		name = menu_entry_name(ent);
 		if (name != NULL && name[0] == 0) {
@@ -879,15 +919,27 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	}
 
 	menu_separation();
+#ifdef USE_SDL2
+	menu_text_clip_right = g_menuscreen_w;
+#endif
 
 	/* display help or message if we have one */
 	h = (g_menuscreen_h - h) / 2; // bottom area height
 	if (menu_error_msg[0] != 0) {
+#ifdef USE_SDL2
+		int message_margin = responsive ? layout.outer_margin : 5;
+
+		menu_text_clip_right = g_menuscreen_w - message_margin;
+		text_out16(message_margin,
+			   g_menuscreen_h - me_mfont_h - message_margin,
+			   "%s", menu_error_msg);
+#else
 		if (h >= me_mfont_h + 4)
 			text_out16(5, g_menuscreen_h - me_mfont_h - 4,
 				   "%s", menu_error_msg);
 		else
 			lprintf("menu msg doesn't fit!\n");
+#endif
 
 		if (plat_get_ticks_ms() - menu_error_time > 2048)
 			menu_error_msg[0] = 0;
@@ -906,6 +958,9 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 #endif
 
 	menu_separation();
+#ifdef USE_SDL2
+	menu_text_clip_right = g_menuscreen_w;
+#endif
 
 	if (draw_more != NULL)
 		draw_more();
