@@ -819,6 +819,35 @@ int in_config_parse_dev(const char *name)
 	return i;
 }
 
+int in_config_parse_devs(const char *name, int *dev_ids, int max_ids)
+{
+	int dev_id, count = 0;
+	int i, j;
+
+	dev_id = in_config_parse_dev(name);
+	if (dev_id < 0)
+		return 0;
+	if (dev_ids == NULL || max_ids <= 0)
+		return 0;
+
+	dev_ids[count++] = dev_id;
+	for (i = 0; i < in_dev_count && count < max_ids; i++) {
+		in_dev_t *dev = &in_devices[i];
+
+		if (dev->name == NULL ||
+		    !DRV(dev->drv_id).config_match(name, dev->name))
+			continue;
+
+		for (j = 0; j < count; j++)
+			if (dev_ids[j] == i)
+				break;
+		if (j == count)
+			dev_ids[count++] = i;
+	}
+
+	return count;
+}
+
 int in_config_bind_key(int dev_id, const char *key, int acts, int bind_type)
 {
 	in_dev_t *dev;
@@ -947,6 +976,10 @@ static int  in_def_update_keycode(void *drv_data, int *is_down) { return 0; }
 static int  in_def_menu_translate(void *drv_data, int keycode, char *ccode) { return 0; }
 static int  in_def_get_key_code(const char *key_name) { return -1; }
 static const char *in_def_get_key_name(int keycode) { return NULL; }
+static int  in_def_config_match(const char *configured_name, const char *device_name)
+{
+	return strcmp(configured_name, device_name) == 0;
+}
 
 #define CHECK_ADD_STUB(d, f) \
 	if (d.f == NULL) d.f = in_def_##f
@@ -975,6 +1008,7 @@ int in_register_driver(const in_drv_t *drv,
 	CHECK_ADD_STUB(new_drivers[in_driver_count], menu_translate);
 	CHECK_ADD_STUB(new_drivers[in_driver_count], get_key_code);
 	CHECK_ADD_STUB(new_drivers[in_driver_count], get_key_name);
+	CHECK_ADD_STUB(new_drivers[in_driver_count], config_match);
 	if (pdata)
 		new_drivers[in_driver_count].pdata = pdata;
 	if (defbinds)

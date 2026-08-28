@@ -152,20 +152,22 @@ void config_read_keys(const char *cfg_content)
 	char dev[256], key[128], *act;
 	const char *p;
 	int bind, bindtype;
-	int dev_id;
+	int dev_ids[IN_MAX_DEVS];
+	int dev_count, i;
 
 	p = cfg_content;
 	while (p != NULL && (p = strstr(p, "binddev = ")) != NULL) {
 		p += 10;
 
 		get_line(dev, sizeof(dev), p);
-		dev_id = in_config_parse_dev(dev);
-		if (dev_id < 0) {
+		dev_count = in_config_parse_devs(dev, dev_ids, IN_MAX_DEVS);
+		if (dev_count == 0) {
 			printf("input: can't handle dev: %s\n", dev);
 			continue;
 		}
 
-		in_unbind_all(dev_id, -1, -1);
+		for (i = 0; i < dev_count; i++)
+			in_unbind_all(dev_ids[i], -1, -1);
 		while ((p = strstr(p, "bind"))) {
 			if (strncmp(p, "binddev = ", 10) == 0)
 				break;
@@ -182,7 +184,7 @@ void config_read_keys(const char *cfg_content)
 					printf("input: analog id %d out of range\n", bind);
 					continue;
 				}
-				in_adev[bind] = dev_id;
+				in_adev[bind] = dev_ids[0];
 				continue;
 			}
 #endif
@@ -206,8 +208,8 @@ void config_read_keys(const char *cfg_content)
 
 			bind = parse_bind_val(act, &bindtype);
 			if (bind != -1 && bind != 0) {
-				//printf("bind #%d '%s' %08x (%s)\n", dev_id, key, bind, act);
-				in_config_bind_key(dev_id, key, bind, bindtype);
+				for (i = 0; i < dev_count; i++)
+					in_config_bind_key(dev_ids[i], key, bind, bindtype);
 			}
 			else
 				lprintf("config: unhandled action \"%s\"\n", act);
