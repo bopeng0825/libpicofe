@@ -184,6 +184,7 @@ void config_read_keys(const char *cfg_content)
 					printf("input: analog id %d out of range\n", bind);
 					continue;
 				}
+				/* in_adev has one owner slot; shared analog needs a redesign. */
 				in_adev[bind] = dev_ids[0];
 				continue;
 			}

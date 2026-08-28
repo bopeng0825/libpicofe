@@ -96,10 +96,10 @@ struct InputDriver {
 	int  (*menu_translate)(void *drv_data, int keycode, char *charcode);
 	int  (*get_key_code)(const char *key_name);
 	const char * (*get_key_name)(int keycode);
-	int (*config_match)(const char *configured_name, const char *device_name);
 
 	const struct in_default_bind *defbinds;
 	const void *pdata;
+	int (*config_match)(const char *configured_name, const char *device_name);
 };
 
 struct in_default_bind {
