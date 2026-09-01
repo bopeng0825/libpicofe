@@ -76,6 +76,16 @@ static int border_left, border_right, border_top, border_bottom;
 static struct menu_responsive_layout responsive_layout;
 static int responsive_layout_active;
 static int menu_text_clip_right;
+static const menu_entry *marquee_entries;
+static int marquee_selection = -1;
+static unsigned int marquee_started;
+
+static void menu_marquee_reset(void)
+{
+	marquee_entries = NULL;
+	marquee_selection = -1;
+	marquee_started = 0;
+}
 
 void menu_set_responsive_layout(const struct menu_responsive_layout *layout)
 {
@@ -283,6 +293,49 @@ void text_out16(int x, int y, const char *texto, ...)
 	menu_text_fit(buffer, max_pixels, fitted, sizeof(fitted), 0);
 	text_out16_(x, y, fitted, menu_text_color);
 }
+
+#ifdef USE_SDL2
+static void text_out16_marquee(int x, int y, const char *text,
+			       int clip_right, unsigned int elapsed_ms)
+{
+	struct menu_rect clip;
+	int text_width = menu_text_width(text, 0);
+	int viewport_width = clip_right - x;
+	int gap_width = me_mfont_w * 3;
+	int offset;
+	int second_x;
+
+	if (!menu_sdl2_available() || viewport_width <= 0 ||
+	    text_width <= viewport_width) {
+		text_out16(x, y, "%s", text);
+		return;
+	}
+
+	offset = menu_marquee_offset(text_width, viewport_width, gap_width,
+				      elapsed_ms);
+	clip.x = x;
+	clip.y = y;
+	clip.w = viewport_width;
+	clip.h = me_mfont_h;
+	menu_sdl2_draw_text_clipped(g_menuscreen_ptr, g_menuscreen_pp,
+				    MENU_FONT_MAIN, x - offset, y,
+				    menu_text_color, text, &clip);
+	second_x = x - offset + text_width + gap_width;
+	if (second_x < clip_right)
+		menu_sdl2_draw_text_clipped(g_menuscreen_ptr, g_menuscreen_pp,
+					    MENU_FONT_MAIN, second_x, y,
+					    menu_text_color, text, &clip);
+
+	if (x < border_left)
+		border_left = x;
+	if (clip_right > border_right)
+		border_right = clip_right;
+	if (y < border_top)
+		border_top = y;
+	if (y + me_mfont_h > border_bottom)
+		border_bottom = y + me_mfont_h;
+}
+#endif
 
 /* draws in 6x8 font, might multiply size by integer */
 static void smalltext_out16_(int x, int y, const char *texto, int color)
@@ -673,9 +726,14 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	int i, n;
 #ifdef USE_SDL2
 	struct menu_responsive_layout layout;
-	int responsive = menu_get_responsive_layout(&layout);
+	int responsive;
 	int visible_first = 0, visible_count = 0;
 	int draw_index = 0;
+	unsigned int now;
+
+	menu_draw_begin(1, 0);
+	responsive = menu_get_responsive_layout(&layout);
+	now = plat_get_ticks_ms();
 #endif
 
 	/* calculate size of menu rect */
@@ -817,18 +875,35 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	menu_text_clip_right = responsive ? layout.menu.x + layout.menu.w :
 		g_menuscreen_w;
 #endif
+#ifndef USE_SDL2
 	menu_draw_begin(1, 0);
+#endif
 	menu_draw_selection(x,
 #ifdef USE_SDL2
 		responsive ? y + (vi_sel_ln - visible_first) * me_mfont_h :
 #endif
 		y + vi_sel_ln * me_mfont_h, w);
 	x += me_mfont_w * 2;
+#ifdef USE_SDL2
+	if (responsive) {
+		int max_col2_offs = layout.menu.x + layout.menu.w - x -
+			me_mfont_w * 3;
+
+		if (max_col2_offs < 0)
+			max_col2_offs = 0;
+		if (col2_offs > max_col2_offs)
+			col2_offs = max_col2_offs;
+	}
+#endif
 
 	for (ent = entries; menu_entry_present(ent); ent++)
 	{
 		const char **names;
 		int len, leftname_end = 0;
+#ifdef USE_SDL2
+		int list_clip_right = menu_text_clip_right;
+		int name_clip_right = list_clip_right;
+#endif
 
 		if (!ent->enabled)
 			continue;
@@ -850,8 +925,33 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 				name = ent->generate_name(ent->id, &offs);
 		}
 		if (name != NULL) {
+#ifdef USE_SDL2
+			if (responsive && ent->beh != MB_NONE) {
+				name_clip_right = x + col2_offs - me_mfont_w;
+				if (name_clip_right < x)
+					name_clip_right = x;
+			}
+			menu_text_clip_right = name_clip_right;
+			if (ent == entries + sel) {
+				if (marquee_entries != entries ||
+				    marquee_selection != sel) {
+					marquee_entries = entries;
+					marquee_selection = sel;
+					marquee_started = now;
+				}
+				text_out16_marquee(x, y, name, name_clip_right,
+						    now - marquee_started);
+			} else
+				text_out16(x, y, "%s", name);
+			menu_text_clip_right = list_clip_right;
+#else
 			text_out16(x, y, "%s", name);
+#endif
 			leftname_end = x + menu_text_width(name, 0) + me_mfont_w;
+#ifdef USE_SDL2
+			if (leftname_end > name_clip_right)
+				leftname_end = name_clip_right;
+#endif
 		}
 
 		switch (ent->beh) {
@@ -1026,6 +1126,9 @@ static int me_loop_d(menu_entry *menu, int *menu_sel, void (*draw_prep)(void), v
 		sel++;
 
 	/* make sure action buttons are not pressed on entering menu */
+#ifdef USE_SDL2
+	menu_marquee_reset();
+#endif
 	me_draw(menu, sel, NULL);
 	while (in_menu_wait_any(NULL, 50) & (PBTN_MOK|PBTN_MBACK|PBTN_MENU));
 
