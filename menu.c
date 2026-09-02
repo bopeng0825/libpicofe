@@ -78,12 +78,14 @@ static int responsive_layout_active;
 static int menu_text_clip_right;
 static const menu_entry *marquee_entries;
 static int marquee_selection = -1;
+static int marquee_active;
 static unsigned int marquee_started;
 
 static void menu_marquee_reset(void)
 {
 	marquee_entries = NULL;
 	marquee_selection = -1;
+	marquee_active = 0;
 	marquee_started = 0;
 }
 
@@ -311,6 +313,7 @@ static void text_out16_marquee(int x, int y, const char *text,
 		return;
 	}
 
+	marquee_active = 1;
 	offset = menu_marquee_offset(text_width, viewport_width, gap_width,
 				      elapsed_ms);
 	clip.x = x;
@@ -729,11 +732,13 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	int responsive;
 	int visible_first = 0, visible_count = 0;
 	int draw_index = 0;
+	int onoff_value_width = 0;
 	unsigned int now;
 
 	menu_draw_begin(1, 0);
 	responsive = menu_get_responsive_layout(&layout);
 	now = plat_get_ticks_ms();
+	marquee_active = 0;
 #endif
 
 	/* calculate size of menu rect */
@@ -769,6 +774,22 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 
 		if (ent->beh != MB_NONE)
 		{
+#ifdef USE_SDL2
+			if (ent->beh == MB_OPT_ONOFF) {
+#ifdef MENU_TRANSLATION_IDS
+				int on_width = menu_text_width(menu_translate(0), 0);
+				int off_width = menu_text_width(menu_translate(1), 0);
+#else
+				int on_width = menu_text_width("ON", 0);
+				int off_width = menu_text_width("OFF", 0);
+#endif
+
+				if (on_width > onoff_value_width)
+					onoff_value_width = on_width;
+				if (off_width > onoff_value_width)
+					onoff_value_width = off_width;
+			}
+#endif
 			if (wt > col2_offs)
 				col2_offs = wt + me_mfont_w;
 			wt = col2_offs;
@@ -886,13 +907,16 @@ static void me_draw(const menu_entry *entries, int sel, void (*draw_more)(void))
 	x += me_mfont_w * 2;
 #ifdef USE_SDL2
 	if (responsive) {
-		int max_col2_offs = layout.menu.x + layout.menu.w - x -
-			me_mfont_w * 3;
+		int value_reserve = me_mfont_w * 3;
+		int measured_reserve = onoff_value_width + me_mfont_w / 2;
+		int preferred_x = x + col2_offs;
+		int value_x;
 
-		if (max_col2_offs < 0)
-			max_col2_offs = 0;
-		if (col2_offs > max_col2_offs)
-			col2_offs = max_col2_offs;
+		if (measured_reserve > value_reserve)
+			value_reserve = measured_reserve;
+		value_x = menu_value_column_x(x, preferred_x,
+			layout.menu.x + layout.menu.w, value_reserve);
+		col2_offs = value_x - x;
 	}
 #endif
 
@@ -1112,9 +1136,32 @@ static int me_process(menu_entry *entry, int is_next, int is_lr)
 
 static void debug_menu_loop(void);
 
+#ifdef USE_SDL2
+struct menu_idle_redraw_data {
+	menu_entry *menu;
+	int *selection;
+	void (*draw_prep)(void);
+	void (*draw_more)(void);
+};
+
+static void menu_idle_redraw(void *data)
+{
+	struct menu_idle_redraw_data *redraw = data;
+
+	if (redraw->draw_prep != NULL)
+		redraw->draw_prep();
+	me_draw(redraw->menu, *redraw->selection, redraw->draw_more);
+}
+#endif
+
 static int me_loop_d(menu_entry *menu, int *menu_sel, void (*draw_prep)(void), void (*draw_more)(void))
 {
 	int ret = 0, inp, sel = *menu_sel, menu_sel_max;
+#ifdef USE_SDL2
+	struct menu_idle_redraw_data redraw = {
+		menu, &sel, draw_prep, draw_more
+	};
+#endif
 
 	menu_sel_max = me_count(menu) - 1;
 	if (menu_sel_max < 0) {
@@ -1138,8 +1185,20 @@ static int me_loop_d(menu_entry *menu, int *menu_sel, void (*draw_prep)(void), v
 			draw_prep();
 
 		me_draw(menu, sel, draw_more);
+#ifdef USE_SDL2
+		if (marquee_active)
+			inp = in_menu_wait_with_callback(
+				PBTN_UP|PBTN_DOWN|PBTN_LEFT|PBTN_RIGHT|
+				PBTN_MOK|PBTN_MBACK|PBTN_MENU|PBTN_L|PBTN_R,
+				NULL, 70, 70, menu_idle_redraw, &redraw);
+		else
+			inp = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_LEFT|PBTN_RIGHT|
+				PBTN_MOK|PBTN_MBACK|PBTN_MENU|PBTN_L|PBTN_R,
+				NULL, 70);
+#else
 		inp = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_LEFT|PBTN_RIGHT|
 			PBTN_MOK|PBTN_MBACK|PBTN_MENU|PBTN_L|PBTN_R, NULL, 70);
+#endif
 		if (inp & (PBTN_MENU|PBTN_MBACK))
 			break;
 

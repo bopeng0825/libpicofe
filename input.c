@@ -46,6 +46,10 @@ static int menu_last_used_dev = 0;
 static int menu_key_prev = 0;
 static int menu_key_mask = 0;
 static int menu_key_repeat = 0;
+#ifdef INPUT_WAIT_TEST
+static int (*menu_wait_test_hook)(int timeout_ms);
+static unsigned int (*menu_ticks_test_hook)(void);
+#endif
 
 #define DRV(id) in_drivers[id]
 
@@ -453,8 +457,66 @@ int in_menu_wait_any(char *charcode, int timeout_ms)
 	return ret;
 }
 
+static int menu_wait_any_call(char *charcode, int timeout_ms)
+{
+#ifdef INPUT_WAIT_TEST
+	if (menu_wait_test_hook != NULL) {
+		menu_key_prev = menu_key_state;
+		menu_key_state = menu_wait_test_hook(timeout_ms);
+		return menu_key_state;
+	}
+#endif
+	return in_menu_wait_any(charcode, timeout_ms);
+}
+
+static unsigned int menu_ticks(void)
+{
+#ifdef INPUT_WAIT_TEST
+	if (menu_ticks_test_hook != NULL)
+		return menu_ticks_test_hook();
+#endif
+	return plat_get_ticks_ms();
+}
+
+static int in_menu_wait_any_with_callback(char *charcode, int timeout_ms,
+					  int redraw_interval_ms,
+					  void (*redraw)(void *data),
+					  void *redraw_data)
+{
+	unsigned int started;
+	int remaining = timeout_ms;
+	int ret;
+
+	if (redraw == NULL || redraw_interval_ms <= 0)
+		return menu_wait_any_call(charcode, timeout_ms);
+
+	started = menu_ticks();
+	for (;;) {
+		int slice = redraw_interval_ms;
+		unsigned int now;
+		unsigned int elapsed;
+
+		if (remaining >= 0 && slice > remaining)
+			slice = remaining;
+		ret = menu_wait_any_call(charcode, slice);
+		if (ret != menu_key_prev)
+			return ret;
+		redraw(redraw_data);
+
+		if (timeout_ms < 0)
+			continue;
+		now = menu_ticks();
+		elapsed = now - started;
+		if (elapsed >= (unsigned int)timeout_ms)
+			return ret;
+		remaining = timeout_ms - (int)elapsed;
+	}
+}
+
 /* wait for menu input, do autorepeat */
-int in_menu_wait(int interesting, char *charcode, int autorep_delay_ms)
+static int in_menu_wait_internal(int interesting, char *charcode,
+				 int autorep_delay_ms, int redraw_interval_ms,
+				 void (*redraw)(void *data), void *redraw_data)
 {
 	int ret, wait = 450;
 
@@ -463,7 +525,8 @@ int in_menu_wait(int interesting, char *charcode, int autorep_delay_ms)
 
 	/* wait until either key repeat or a new key has been pressed */
 	do {
-		ret = in_menu_wait_any(charcode, wait);
+		ret = in_menu_wait_any_with_callback(charcode, wait,
+			redraw_interval_ms, redraw, redraw_data);
 		if (ret == 0 || ret != menu_key_prev)
 			menu_key_repeat = 0;
 		else
@@ -479,6 +542,35 @@ int in_menu_wait(int interesting, char *charcode, int autorep_delay_ms)
 
 	return ret;
 }
+
+int in_menu_wait(int interesting, char *charcode, int autorep_delay_ms)
+{
+	return in_menu_wait_internal(interesting, charcode,
+				     autorep_delay_ms, 0, NULL, NULL);
+}
+
+int in_menu_wait_with_callback(int interesting, char *charcode,
+			       int autorep_delay_ms, int redraw_interval_ms,
+			       void (*redraw)(void *data), void *redraw_data)
+{
+	return in_menu_wait_internal(interesting, charcode,
+				     autorep_delay_ms, redraw_interval_ms,
+				     redraw, redraw_data);
+}
+
+#ifdef INPUT_WAIT_TEST
+void in_menu_wait_test_setup(int initial_state,
+			     int (*wait_hook)(int timeout_ms),
+			     unsigned int (*ticks_hook)(void))
+{
+	menu_key_state = initial_state;
+	menu_key_prev = initial_state;
+	menu_key_mask = 0;
+	menu_key_repeat = 0;
+	menu_wait_test_hook = wait_hook;
+	menu_ticks_test_hook = ticks_hook;
+}
+#endif
 
 const int *in_get_dev_binds(int dev_id)
 {

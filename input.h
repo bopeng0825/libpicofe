@@ -145,6 +145,14 @@ int  in_update_analog(int dev_id, int axis_id, int *value);
 int  in_update_keycode(int *dev_id, int *is_down, char *charcode, int timeout_ms);
 int  in_menu_wait_any(char *charcode, int timeout_ms);
 int  in_menu_wait(int interesting, char *charcode, int autorep_delay_ms);
+int  in_menu_wait_with_callback(int interesting, char *charcode,
+				int autorep_delay_ms, int redraw_interval_ms,
+				void (*redraw)(void *data), void *redraw_data);
+#ifdef INPUT_WAIT_TEST
+void in_menu_wait_test_setup(int initial_state,
+			     int (*wait_hook)(int timeout_ms),
+			     unsigned int (*ticks_hook)(void));
+#endif
 int  in_config_parse_dev(const char *dev_name);
 int  in_config_parse_devs(const char *name, int *dev_ids, int max_ids);
 int  in_config_bind_key(int dev_id, const char *key, int binds, int bind_type);
