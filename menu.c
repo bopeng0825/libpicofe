@@ -1681,7 +1681,7 @@ rescan:
 
 // ------------ savestate loader ------------
 
-#define STATE_SLOT_COUNT 10
+#define STATE_SLOT_COUNT 8
 
 static int state_slot_flags = 0;
 static int state_slot_times[STATE_SLOT_COUNT];
