@@ -1704,11 +1704,12 @@ static void draw_savestate_bg(int slot);
 static void draw_savestate_menu(int menu_sel, int is_loading)
 {
 	int i, x, y, w, h;
-	char time_buf[32];
 #ifdef USE_SDL2
 	char slot_buf[64];
 #endif
 	const char *title;
+	const char *empty_text;
+	const char *saved_text;
 
 	if (state_slot_flags & (1 << menu_sel))
 		draw_savestate_bg(menu_sel);
@@ -1716,18 +1717,24 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 #ifdef MENU_TRANSLATION_IDS
 	title = menu_translate(is_loading ? UI_TEXT_LOAD_STATE_TITLE :
 			       UI_TEXT_SAVE_STATE_TITLE);
+	empty_text = menu_translate(UI_TEXT_SLOT_EMPTY);
+	saved_text = menu_translate(UI_TEXT_SLOT_SAVED);
 #else
 	title = is_loading ? "Load state" : "Save state";
+	empty_text = "Empty";
+	saved_text = "Saved";
 #endif
 #ifdef USE_SDL2
 	w = menu_text_width(title, 0);
 	for (i = 0; i < STATE_SLOT_COUNT; i++) {
+		const char *status = state_slot_flags & (1 << i) ?
+			saved_text : empty_text;
 #ifdef MENU_TRANSLATION_IDS
 		snprintf(slot_buf, sizeof(slot_buf), menu_translate(UI_TEXT_SLOT_FMT),
-			 i, "00/00/00 00:00");
+			 i, status);
 #else
 		snprintf(slot_buf, sizeof(slot_buf), "SLOT %i (%s)",
-			 i, "00/00/00 00:00");
+			 i, status);
 #endif
 		if (menu_text_width(slot_buf, 0) > w)
 			w = menu_text_width(slot_buf, 0);
@@ -1763,21 +1770,13 @@ static void draw_savestate_menu(int menu_sel, int is_loading)
 	/* draw all slots */
 	for (i = 0; i < STATE_SLOT_COUNT; i++, y += me_mfont_h)
 	{
-		if (!(state_slot_flags & (1 << i)))
-			strcpy(time_buf, "free");
-		else {
-			strcpy(time_buf, "USED");
-			if (state_slot_times[i] != 0) {
-				time_t time = state_slot_times[i];
-				struct tm *t = localtime(&time);
-				strftime(time_buf, sizeof(time_buf), "%x %R", t);
-			}
-		}
+		const char *status = state_slot_flags & (1 << i) ?
+			saved_text : empty_text;
 
 #ifdef MENU_TRANSLATION_IDS
-		text_out16(x, y, menu_translate(UI_TEXT_SLOT_FMT), i, time_buf);
+		text_out16(x, y, menu_translate(UI_TEXT_SLOT_FMT), i, status);
 #else
-		text_out16(x, y, "SLOT %i (%s)", i, time_buf);
+		text_out16(x, y, "SLOT %i (%s)", i, status);
 #endif
 	}
 #ifdef MENU_TRANSLATION_IDS
